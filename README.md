@@ -9,6 +9,7 @@ COBOL 向けの VS Code 拡張機能です。COBOL ソース (.cbl/.cob/.cobol/.
 - COPYBOOK 検索パス（ワークスペース内の `copybooks/`、`copy/`、環境変数 `COBOL_COPYPATH`）
 - TextMate ベースのシンタックスハイライト
 - 診断: 未定義への代入警告、未使用シンボルのヒント（グループ項目に配慮）
+- アウトライン表示: VS Code のアウトラインビューに変数・段落・セクションを階層表示
 
 ## プロジェクト構成
 - client/ — VS Code 拡張本体（language client を起動）
@@ -63,6 +64,7 @@ code --install-extension cobol-lsp-0.1.0.vsix
   - COPYBOOK 定義の変数（REPLACING / DISJOINING / JOINING を含む）が解決される
 - 変数にホバーしてレベル/PIC/行/ファイル名が表示される
 - Problems パネルに未定義代入や未使用シンボルが出ることを確認
+- アウトラインビュー (Ctrl+Shift+O または View → Outline) で変数・段落・セクションの階層構造が表示される
 
 ## スクリプト
 - `npm run compile` — クライアントとサーバーをビルド
