@@ -26,7 +26,7 @@ import * as path from 'path';
 
 import { CopybookResolver } from './resolver/copybookResolver';
 import { ProgramResolver } from './resolver/programResolver';
-import { SymbolIndex } from './index/symbolIndex';
+import { SymbolIndex, SymbolInfo } from './index/symbolIndex';
 
 const connection = createConnection(ProposedFeatures.all);
 const documents = new TextDocuments(TextDocument);
@@ -214,27 +214,33 @@ connection.onDocumentSymbol((params: DocumentSymbolParams): DocumentSymbol[] => 
     connection.console.log(`[DocumentSymbol] Found ${allSymbols.length} symbols in document`);
     
     // DocumentSymbol形式に変換
-    return convertToDocumentSymbols(allSymbols);
+    return convertToDocumentSymbols(allSymbols, document);
 });
 
 /**
  * SymbolInfo配列をDocumentSymbol配列に変換する。
  * 変数の階層構造を考慮して、親子関係を構築する。
  * @param symbols SymbolInfo配列
+ * @param document ドキュメント（行の長さ取得に使用）
  * @returns DocumentSymbol配列（階層構造付き）
  */
-function convertToDocumentSymbols(symbols: any[]): DocumentSymbol[] {
+function convertToDocumentSymbols(symbols: SymbolInfo[], document: TextDocument): DocumentSymbol[] {
     const documentSymbols: DocumentSymbol[] = [];
     const symbolStack: { symbol: DocumentSymbol; level: number }[] = [];
+    
+    const text = document.getText();
+    const lines = text.split('\n');
     
     for (const symbol of symbols) {
         const symbolKind = getSymbolKind(symbol.type);
         const symbolName = symbol.name;
         
-        // シンボルの範囲を設定（行全体）
+        // シンボルの範囲を設定（実際の行の長さを使用）
+        const lineText = lines[symbol.line] || '';
+        const lineLength = lineText.length;
         const range = Range.create(
             Position.create(symbol.line, 0),
-            Position.create(symbol.line + 1, 0)
+            Position.create(symbol.line, lineLength)
         );
         
         // 選択範囲（シンボル名自体）
@@ -273,10 +279,9 @@ function convertToDocumentSymbols(symbols: any[]): DocumentSymbol[] {
             if (symbolStack.length > 0) {
                 // 親シンボルの子として追加
                 const parent = symbolStack[symbolStack.length - 1].symbol;
-                if (!parent.children) {
-                    parent.children = [];
+                if (parent.children) {
+                    parent.children.push(docSymbol);
                 }
-                parent.children.push(docSymbol);
             } else {
                 // ルートレベルのシンボル
                 documentSymbols.push(docSymbol);
