@@ -14,7 +14,10 @@ import {
     Hover,
     MarkupContent,
     Diagnostic,
-    DiagnosticSeverity
+    DiagnosticSeverity,
+    DocumentSymbol,
+    DocumentSymbolParams,
+    SymbolKind
 } from 'vscode-languageserver/node';
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -64,7 +67,8 @@ connection.onInitialize((params:  InitializeParams) => {
             textDocumentSync:  TextDocumentSyncKind.Full,
             definitionProvider: true,
             referencesProvider: true,
-            hoverProvider: true
+            hoverProvider: true,
+            documentSymbolProvider: true
         }
     };
 });
@@ -188,6 +192,126 @@ connection.onHover((params: HoverParams): Hover | null => {
     connection.console.log(`[Hover] Symbol not found: ${word}`);
     return null;
 });
+
+/**
+ * ドキュメントシンボル（アウトライン）の提供を行う。
+ * @param params ドキュメントシンボル要求パラメータ
+ * @returns ドキュメントシンボルの配列。見つからない場合は空配列。
+ */
+connection.onDocumentSymbol((params: DocumentSymbolParams): DocumentSymbol[] => {
+    const document = documents.get(params.textDocument.uri);
+    if (!document) {
+        connection.console.log(`[DocumentSymbol] Document not found: ${params.textDocument.uri}`);
+        return [];
+    }
+    
+    // ドキュメントをインデックス化
+    symbolIndex.indexDocument(document);
+    loadCopybooksFromDocument(document);
+    
+    // すべてのシンボルを取得
+    const allSymbols = symbolIndex.getAllSymbols(document.uri);
+    connection.console.log(`[DocumentSymbol] Found ${allSymbols.length} symbols in document`);
+    
+    // DocumentSymbol形式に変換
+    return convertToDocumentSymbols(allSymbols);
+});
+
+/**
+ * SymbolInfo配列をDocumentSymbol配列に変換する。
+ * 変数の階層構造を考慮して、親子関係を構築する。
+ * @param symbols SymbolInfo配列
+ * @returns DocumentSymbol配列（階層構造付き）
+ */
+function convertToDocumentSymbols(symbols: any[]): DocumentSymbol[] {
+    const documentSymbols: DocumentSymbol[] = [];
+    const symbolStack: { symbol: DocumentSymbol; level: number }[] = [];
+    
+    for (const symbol of symbols) {
+        const symbolKind = getSymbolKind(symbol.type);
+        const symbolName = symbol.name;
+        
+        // シンボルの範囲を設定（行全体）
+        const range = Range.create(
+            Position.create(symbol.line, 0),
+            Position.create(symbol.line + 1, 0)
+        );
+        
+        // 選択範囲（シンボル名自体）
+        const selectionRange = Range.create(
+            Position.create(symbol.line, symbol.column),
+            Position.create(symbol.line, symbol.column + symbolName.length)
+        );
+        
+        // 詳細情報を構築
+        let detail = '';
+        if (symbol.level !== undefined) {
+            detail = `Level ${symbol.level}`;
+        }
+        if (symbol.picture) {
+            detail += detail ? ` PIC ${symbol.picture}` : `PIC ${symbol.picture}`;
+        }
+        
+        const docSymbol: DocumentSymbol = {
+            name: symbolName,
+            detail: detail || undefined,
+            kind: symbolKind,
+            range: range,
+            selectionRange: selectionRange,
+            children: []
+        };
+        
+        // 変数の場合、レベルに基づいて階層構造を構築
+        if (symbol.type === 'variable' && symbol.level !== undefined) {
+            const currentLevel = symbol.level;
+            
+            // スタックから現在のレベル以下のシンボルを削除
+            while (symbolStack.length > 0 && symbolStack[symbolStack.length - 1].level >= currentLevel) {
+                symbolStack.pop();
+            }
+            
+            if (symbolStack.length > 0) {
+                // 親シンボルの子として追加
+                const parent = symbolStack[symbolStack.length - 1].symbol;
+                if (!parent.children) {
+                    parent.children = [];
+                }
+                parent.children.push(docSymbol);
+            } else {
+                // ルートレベルのシンボル
+                documentSymbols.push(docSymbol);
+            }
+            
+            // スタックに追加（88レベルは親にならない）
+            if (currentLevel !== 88) {
+                symbolStack.push({ symbol: docSymbol, level: currentLevel });
+            }
+        } else {
+            // パラグラフやセクションはルートレベルに追加
+            documentSymbols.push(docSymbol);
+        }
+    }
+    
+    return documentSymbols;
+}
+
+/**
+ * シンボルタイプからVS CodeのSymbolKindに変換する。
+ * @param symbolType シンボルタイプ ('variable', 'paragraph', 'section')
+ * @returns SymbolKind
+ */
+function getSymbolKind(symbolType: string): SymbolKind {
+    switch (symbolType) {
+        case 'variable':
+            return SymbolKind.Variable;
+        case 'paragraph':
+            return SymbolKind.Function;
+        case 'section':
+            return SymbolKind.Class;
+        default:
+            return SymbolKind.Variable;
+    }
+}
 
 /**
  * 記号情報からホバー表示用のコンテンツを生成する。
