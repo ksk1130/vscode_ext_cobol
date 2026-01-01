@@ -49,7 +49,7 @@ build-vsix.bat
 2. クライアントとサーバーのコンパイル (`npm run compile`)
 3. VSIX パッケージの作成 (`vsce package`)
 
-実行後、ルートディレクトリに `cobol-lsp-0.1.0.vsix` が生成されます。
+実行後、ルートディレクトリに `<package-name>-<version>.vsix` が生成されます（例: `cobol-lsp-0.1.0.vsix`）。
 
 ### 手動での作成方法
 1. vsce のインストール（未導入なら）
@@ -70,8 +70,9 @@ vsce package --allow-missing-repository
 - VS Code のコマンドパレット → "Extensions: Install from VSIX..." で .vsix を選択
 - または CLI から:
 ```
-code --install-extension cobol-lsp-0.1.0.vsix
+code --install-extension <package-name>-<version>.vsix
 ```
+（例: `code --install-extension cobol-lsp-0.1.0.vsix`）
 
 ### アップデート時
 再度ビルドスクリプトを実行するか `vsce package` で新しい .vsix を生成し、同様にインストール

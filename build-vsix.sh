@@ -39,7 +39,7 @@ echo ""
 echo "The VSIX file has been created in the current directory."
 echo "You can install it using:"
 echo "  - VS Code Command Palette: \"Extensions: Install from VSIX...\""
-echo "  - Or CLI: code --install-extension cobol-lsp-0.1.0.vsix"
+echo "  - Or CLI: code --install-extension <package-name>-<version>.vsix"
 echo ""
 
 exit 0
