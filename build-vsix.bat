@@ -1,55 +1,55 @@
 @echo off
 REM ================================================================
-REM COBOL LSP Extension - Build and VSIX Package Creation Script
+REM COBOL LSP拡張機能 - ビルド＋VSIXパッケージ作成スクリプト
 REM ================================================================
-REM This script performs the following steps:
-REM 1. Install npm dependencies
-REM 2. Compile client and server TypeScript code
-REM 3. Create VSIX package for distribution
+REM このスクリプトは以下の処理を実行します:
+REM 1. npm依存関係のインストール
+REM 2. クライアントとサーバーのTypeScriptコードをコンパイル
+REM 3. 配布用VSIXパッケージの作成
 REM ================================================================
 
 echo ========================================
-echo COBOL LSP Extension - Build and Package
+echo COBOL LSP拡張機能 - ビルドとパッケージ化
 echo ========================================
 echo.
 
-REM Step 1: Install dependencies
-echo [1/3] Installing dependencies...
+REM ステップ1: 依存関係のインストール
+echo [1/3] 依存関係をインストール中...
 call npm install
 if errorlevel 1 (
-    echo ERROR: Failed to install dependencies
+    echo エラー: 依存関係のインストールに失敗しました
     exit /b 1
 )
-echo Dependencies installed successfully.
+echo 依存関係のインストールが完了しました。
 echo.
 
-REM Step 2: Compile client and server
-echo [2/3] Compiling client and server...
+REM ステップ2: クライアントとサーバーのコンパイル
+echo [2/3] クライアントとサーバーをコンパイル中...
 call npm run compile
 if errorlevel 1 (
-    echo ERROR: Failed to compile
+    echo エラー: コンパイルに失敗しました
     exit /b 1
 )
-echo Compilation completed successfully.
+echo コンパイルが完了しました。
 echo.
 
-REM Step 3: Create VSIX package
-echo [3/3] Creating VSIX package...
+REM ステップ3: VSIXパッケージの作成
+echo [3/3] VSIXパッケージを作成中...
 call npx vsce package --allow-missing-repository
 if errorlevel 1 (
-    echo ERROR: Failed to create VSIX package
+    echo エラー: VSIXパッケージの作成に失敗しました
     exit /b 1
 )
 echo.
 
 echo ========================================
-echo Build and packaging completed successfully!
+echo ビルドとパッケージ化が完了しました！
 echo ========================================
 echo.
-echo The VSIX file has been created in the current directory.
-echo You can install it using:
-echo   - VS Code Command Palette: "Extensions: Install from VSIX..."
-echo   - Or CLI: code --install-extension <package-name>-<version>.vsix
+echo VSIXファイルが現在のディレクトリに作成されました。
+echo 次の方法でインストールできます:
+echo   - VS Codeのコマンドパレット: "Extensions: Install from VSIX..."
+echo   - またはCLIから: code --install-extension <package-name>-<version>.vsix
 echo.
 
 exit /b 0
