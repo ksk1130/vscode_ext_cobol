@@ -14,10 +14,15 @@ let client: LanguageClient;
  * @param context 拡張機能コンテキスト
  */
 export function activate(context: ExtensionContext) {
+    // 出力チャンネルを作成
+    const outputChannel = window.createOutputChannel('COBOL LSP');
+    
     // サーバーモジュールのパス
     const serverModule = context.asAbsolutePath(
         path.join('server', 'out', 'server.js')
     );
+    
+    outputChannel.appendLine(`Server module path: ${serverModule}`);
 
     // デバッグオプション
     const debugOptions = { execArgv: ['--nolazy', '--inspect=6009'] };
@@ -47,7 +52,8 @@ export function activate(context: ExtensionContext) {
             configurationSection: 'cobol',
             // ファイル変更を監視
             fileEvents: workspace.createFileSystemWatcher('**/*.{cbl,cob,cobol,cpy,CBL,COB,COBOL,CPY}')
-        }
+        },
+        outputChannel: outputChannel
     };
 
     // Language Clientを作成して起動
@@ -64,6 +70,7 @@ export function activate(context: ExtensionContext) {
     // ステータスバーに表示
     window.setStatusBarMessage('cobol LSP: Active', 3000);
 
+    outputChannel.appendLine('cobol LSP extension is now active');
     console.log('cobol LSP extension is now active');
 }
 
