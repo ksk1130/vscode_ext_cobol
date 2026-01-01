@@ -49,7 +49,7 @@ echo.
 echo The VSIX file has been created in the current directory.
 echo You can install it using:
 echo   - VS Code Command Palette: "Extensions: Install from VSIX..."
-echo   - Or CLI: code --install-extension ^<package-name^>-^<version^>.vsix
+echo   - Or CLI: code --install-extension <package-name>-<version>.vsix
 echo.
 
 exit /b 0
