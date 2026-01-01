@@ -2,6 +2,18 @@
 import { TextDocument } from 'vscode-languageserver-textdocument';
 
 /**
+ * PROCEDURE DIVISION内で段落として扱わないCOBOL予約語のセット
+ */
+const EXCLUDED_PARAGRAPH_KEYWORDS = new Set([
+    'END-IF', 'END-PERFORM', 'END-EVALUATE', 'END-READ', 
+    'END-WRITE', 'END-SEARCH', 'END-CALL', 'END-COMPUTE',
+    'END-ADD', 'END-SUBTRACT', 'END-MULTIPLY', 'END-DIVIDE',
+    'END-RETURN', 'END-REWRITE', 'END-START', 'END-STRING',
+    'END-UNSTRING', 'END-ACCEPT', 'END-DISPLAY', 'END-DELETE',
+    'ELSE', 'WHEN', 'EXIT'
+]);
+
+/**
  * シンボル情報インターフェース
  */
 export interface SymbolInfo {
@@ -180,16 +192,7 @@ export class SymbolIndex {
                     const paraName = paraMatch[1].toUpperCase();
                     
                     // COBOL予約語や制御構文の終端キーワードを除外
-                    const excludedKeywords = [
-                        'END-IF', 'END-PERFORM', 'END-EVALUATE', 'END-READ', 
-                        'END-WRITE', 'END-SEARCH', 'END-CALL', 'END-COMPUTE',
-                        'END-ADD', 'END-SUBTRACT', 'END-MULTIPLY', 'END-DIVIDE',
-                        'END-RETURN', 'END-REWRITE', 'END-START', 'END-STRING',
-                        'END-UNSTRING', 'END-ACCEPT', 'END-DISPLAY', 'END-DELETE',
-                        'ELSE', 'WHEN', 'EXIT'
-                    ];
-                    
-                    if (!excludedKeywords.includes(paraName)) {
+                    if (!EXCLUDED_PARAGRAPH_KEYWORDS.has(paraName)) {
                         symbols.push({
                             name: paraMatch[1],
                             type: 'paragraph',
