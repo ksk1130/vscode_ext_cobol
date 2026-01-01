@@ -30,25 +30,52 @@ npm run compile
 3. VS Code で F5 を押して Extension Development Host を起動
 
 ## 配布用パッケージの作成とインストール
+
+### 簡単な方法（推奨）
+ビルド＋VSIX作成を一度に行うバッチファイルを用意しています。
+
+**Windows:**
+```
+build-vsix.bat
+```
+
+**Linux/Mac:**
+```
+./build-vsix.sh
+```
+
+このスクリプトは以下を自動実行します:
+1. 依存関係のインストール (`npm install`)
+2. クライアントとサーバーのコンパイル (`npm run compile`)
+3. VSIX パッケージの作成 (`vsce package`)
+
+実行後、ルートディレクトリに `<package-name>-<version>.vsix` が生成されます（例: `cobol-lsp-0.1.0.vsix`）。
+
+### 手動での作成方法
 1. vsce のインストール（未導入なら）
 ```
 npm install -g @vscode/vsce
 ```
-2. ルートでパッケージを作成（.vsix が生成されます）
+2. 依存関係のインストールとビルド
 ```
-vsce package
+npm install
+npm run compile
 ```
-3. 生成物の例
+3. ルートでパッケージを作成（.vsix が生成されます）
 ```
-cobol-lsp-0.1.0.vsix
+vsce package --allow-missing-repository
 ```
-4. インストール方法
-  - VS Code のコマンドパレット → "Extensions: Install from VSIX..." で .vsix を選択
-  - または CLI から:
+
+### インストール方法
+- VS Code のコマンドパレット → "Extensions: Install from VSIX..." で .vsix を選択
+- または CLI から:
 ```
-code --install-extension cobol-lsp-0.1.0.vsix
+code --install-extension <package-name>-<version>.vsix
 ```
-5. アップデート時は再度 `vsce package` で新しい .vsix を生成し、同様にインストール
+（例: `code --install-extension cobol-lsp-0.1.0.vsix`）
+
+### アップデート時
+再度ビルドスクリプトを実行するか `vsce package` で新しい .vsix を生成し、同様にインストール
 
 ## 開発メモ
 - LSP サーバーのエントリ: server/src/server.ts
@@ -68,7 +95,7 @@ code --install-extension cobol-lsp-0.1.0.vsix
 
 ## スクリプト
 - `npm run compile` — クライアントとサーバーをビルド
-- `npm run lint` — （必要なら追加）
+- `build-vsix.bat` (Windows) / `./build-vsix.sh` (Linux/Mac) — ビルド＋VSIX作成を一括実行
 
 ## 依存関係
 - クライアント: vscode-languageclient (^9.0.1)

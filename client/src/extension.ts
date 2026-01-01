@@ -30,7 +30,7 @@ export function activate(context: ExtensionContext) {
         },
         debug: {
             module: serverModule,
-            transport: TransportKind. ipc,
+            transport: TransportKind.ipc,
             options: debugOptions
         }
     };
@@ -62,7 +62,7 @@ export function activate(context: ExtensionContext) {
     client.start();
 
     // ステータスバーに表示
-    window.setStatusBarMessage('cobol LSP:  Active', 3000);
+    window.setStatusBarMessage('cobol LSP: Active', 3000);
 
     console.log('cobol LSP extension is now active');
 }

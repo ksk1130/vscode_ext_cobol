@@ -49,7 +49,7 @@ connection.onInitialize((params:  InitializeParams) => {
             workspaceRoot ?  path.join(workspaceRoot, 'copybooks') : '',
             workspaceRoot ? path.join(workspaceRoot, 'copy') : '',
             // cobol標準のCOPYBOOKパス
-            process.env. COBOL_COPYPATH || ''
+            process.env.COBOL_COPYPATH || ''
         ].filter(p => p),
         extensions: ['.cpy', '.CPY', '.cbl', '.CBL', '']
     });

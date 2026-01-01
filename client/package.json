@@ -18,8 +18,8 @@
     "languages": [
       {
         "id":  "cobol",
-        "extensions": [".cbl", ".cob", ".cobol", ".cpy", ".CBL", ". COB", ".COBOL", ".CPY"],
-        "aliases": ["COBOL", "cobol", "cobol"],
+        "extensions": [".cbl", ".cob", ".cobol", ".cpy", ".CBL", ".COB", ".COBOL", ".CPY"],
+        "aliases": ["COBOL", "cobol"],
         "configuration": "./language-configuration.json"
       }
     ],
@@ -46,7 +46,7 @@
         },
         "cobol.fileExtensions": {
           "type":  "array",
-          "default":  [".cbl", ".cob", ".cobol", ".CBL", ".COB", ". COBOL"],
+          "default":  [".cbl", ".cob", ".cobol", ".CBL", ".COB", ".COBOL"],
           "description": "COBOLファイルの拡張子"
         },
         "cobol.copybookExtensions": {
@@ -54,7 +54,7 @@
           "default": [".cpy", ".CPY", ".cbl", ".CBL", ""],
           "description": "COPYBOOKファイルの拡張子"
         },
-        "cobol.trace. server": {
+        "cobol.trace.server": {
           "type": "string",
           "enum": ["off", "messages", "verbose"],
           "default": "off",
