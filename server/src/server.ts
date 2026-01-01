@@ -220,18 +220,64 @@ connection.onDocumentSymbol((params: DocumentSymbolParams): DocumentSymbol[] => 
 /**
  * SymbolInfo配列をDocumentSymbol配列に変換する。
  * 変数の階層構造を考慮して、親子関係を構築する。
+ * Divisionはコンテナとして機能し、その中の要素を含む。
  * @param symbols SymbolInfo配列
  * @param document ドキュメント（行の長さ取得に使用）
  * @returns DocumentSymbol配列（階層構造付き）
  */
 function convertToDocumentSymbols(symbols: SymbolInfo[], document: TextDocument): DocumentSymbol[] {
     const documentSymbols: DocumentSymbol[] = [];
-    const symbolStack: { symbol: DocumentSymbol; level: number }[] = [];
-    
     const text = document.getText();
     const lines = text.split('\n');
     
+    // Division を検出してマップを作成
+    const divisions: Map<string, { symbol: DocumentSymbol; startLine: number; endLine: number }> = new Map();
+    
+    // まず Division を処理
     for (const symbol of symbols) {
+        if (symbol.type === 'division') {
+            const lineText = lines[symbol.line] || '';
+            const lineLength = lineText.length;
+            const endLine = symbol.endLine !== undefined ? symbol.endLine : lines.length - 1;
+            const endLineText = lines[endLine] || '';
+            const endLineLength = endLineText.length;
+            
+            const range = Range.create(
+                Position.create(symbol.line, 0),
+                Position.create(endLine, endLineLength)
+            );
+            
+            const selectionRange = Range.create(
+                Position.create(symbol.line, symbol.column),
+                Position.create(symbol.line, symbol.column + symbol.name.length)
+            );
+            
+            const docSymbol: DocumentSymbol = {
+                name: symbol.name,
+                detail: undefined,
+                kind: SymbolKind.Module,
+                range: range,
+                selectionRange: selectionRange,
+                children: []
+            };
+            
+            documentSymbols.push(docSymbol);
+            divisions.set(symbol.name, {
+                symbol: docSymbol,
+                startLine: symbol.line,
+                endLine: endLine
+            });
+        }
+    }
+    
+    // Division 内の変数をグループ化するためのスタック
+    const variableStack: { symbol: DocumentSymbol; level: number }[] = [];
+    let currentDivision: DocumentSymbol | null = null;
+    
+    // 次に Division 以外のシンボルを処理
+    for (const symbol of symbols) {
+        if (symbol.type === 'division') continue;
+        
         const symbolKind = getSymbolKind(symbol.type);
         const symbolName = symbol.name;
         
@@ -267,33 +313,56 @@ function convertToDocumentSymbols(symbols: SymbolInfo[], document: TextDocument)
             children: []
         };
         
+        // このシンボルが属する Division を特定
+        let belongsToDivision: DocumentSymbol | null = null;
+        for (const [divName, divInfo] of divisions.entries()) {
+            if (symbol.line > divInfo.startLine && symbol.line <= divInfo.endLine) {
+                belongsToDivision = divInfo.symbol;
+                break;
+            }
+        }
+        
         // 変数の場合、レベルに基づいて階層構造を構築
         if (symbol.type === 'variable' && symbol.level !== undefined) {
             const currentLevel = symbol.level;
             
-            // スタックから現在のレベル以下のシンボルを削除
-            while (symbolStack.length > 0 && symbolStack[symbolStack.length - 1].level >= currentLevel) {
-                symbolStack.pop();
+            // Division が変わったらスタックをクリア
+            if (belongsToDivision !== currentDivision) {
+                variableStack.length = 0;
+                currentDivision = belongsToDivision;
             }
             
-            if (symbolStack.length > 0) {
-                // 親シンボルの子として追加
-                const parent = symbolStack[symbolStack.length - 1].symbol;
+            // スタックから現在のレベル以下のシンボルを削除
+            while (variableStack.length > 0 && variableStack[variableStack.length - 1].level >= currentLevel) {
+                variableStack.pop();
+            }
+            
+            if (variableStack.length > 0) {
+                // 親変数の子として追加
+                const parent = variableStack[variableStack.length - 1].symbol;
                 if (parent.children) {
                     parent.children.push(docSymbol);
                 }
+            } else if (belongsToDivision && belongsToDivision.children) {
+                // Division の直接の子として追加
+                belongsToDivision.children.push(docSymbol);
             } else {
-                // ルートレベルのシンボル
+                // Division がない場合はルートレベルに追加
                 documentSymbols.push(docSymbol);
             }
             
             // スタックに追加（88レベルは親にならない）
             if (currentLevel !== 88) {
-                symbolStack.push({ symbol: docSymbol, level: currentLevel });
+                variableStack.push({ symbol: docSymbol, level: currentLevel });
             }
         } else {
-            // パラグラフやセクションはルートレベルに追加
-            documentSymbols.push(docSymbol);
+            // パラグラフやセクションは Division の子として追加
+            if (belongsToDivision && belongsToDivision.children) {
+                belongsToDivision.children.push(docSymbol);
+            } else {
+                // Division がない場合はルートレベルに追加
+                documentSymbols.push(docSymbol);
+            }
         }
     }
     
@@ -302,7 +371,7 @@ function convertToDocumentSymbols(symbols: SymbolInfo[], document: TextDocument)
 
 /**
  * シンボルタイプからVS CodeのSymbolKindに変換する。
- * @param symbolType シンボルタイプ ('variable', 'paragraph', 'section')
+ * @param symbolType シンボルタイプ ('variable', 'paragraph', 'section', 'division')
  * @returns SymbolKind
  */
 function getSymbolKind(symbolType: string): SymbolKind {
@@ -313,6 +382,8 @@ function getSymbolKind(symbolType: string): SymbolKind {
             return SymbolKind.Function;
         case 'section':
             return SymbolKind.Class;
+        case 'division':
+            return SymbolKind.Module;
         default:
             return SymbolKind.Variable;
     }
