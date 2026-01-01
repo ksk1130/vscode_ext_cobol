@@ -16,7 +16,7 @@ let client: LanguageClient;
 export function activate(context: ExtensionContext) {
     // サーバーモジュールのパス
     const serverModule = context.asAbsolutePath(
-        path.join('..', 'server', 'out', 'server.js')
+        path.join('server', 'out', 'server.js')
     );
 
     // デバッグオプション
