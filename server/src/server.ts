@@ -316,7 +316,7 @@ function convertToDocumentSymbols(symbols: SymbolInfo[], document: TextDocument)
         // このシンボルが属する Division を特定
         let belongsToDivision: DocumentSymbol | null = null;
         for (const [divName, divInfo] of divisions.entries()) {
-            if (symbol.line > divInfo.startLine && symbol.line <= divInfo.endLine) {
+            if (symbol.line >= divInfo.startLine && symbol.line <= divInfo.endLine) {
                 belongsToDivision = divInfo.symbol;
                 break;
             }

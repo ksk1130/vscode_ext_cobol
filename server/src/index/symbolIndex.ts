@@ -7,7 +7,7 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 export interface SymbolInfo {
     name: string;
     type: 'variable' | 'paragraph' | 'section' | 'division';
-    level?:  number;  // COBOL level number (01, 05, etc.)
+    level?: number;  // COBOL level number (01, 05, etc.)
     line: number;
     column: number;
     picture?: string;  // PIC句
@@ -27,7 +27,7 @@ export class SymbolIndex {
      */
     indexDocument(document: TextDocument): void {
         const uri = document.uri;
-        const symbols:  SymbolInfo[] = [];
+        const symbols: SymbolInfo[] = [];
         const text = document.getText();
         const lines = text.split('\n');
         
@@ -53,8 +53,9 @@ export class SymbolIndex {
             // Division検出
             if (trimmed.match(/IDENTIFICATION\s+DIVISION/i)) {
                 identificationDivisionStart = i;
+                const match = contentArea.match(/IDENTIFICATION\s+DIVISION/i);
                 const divName = 'IDENTIFICATION DIVISION';
-                const columnInContent = contentArea.toUpperCase().indexOf(divName);
+                const columnInContent = match ? contentArea.indexOf(match[0]) : 0;
                 symbols.push({
                     name: divName,
                     type: 'division',
@@ -71,8 +72,9 @@ export class SymbolIndex {
                     if (idDiv) idDiv.endLine = i - 1;
                 }
                 environmentDivisionStart = i;
+                const match = contentArea.match(/ENVIRONMENT\s+DIVISION/i);
                 const divName = 'ENVIRONMENT DIVISION';
-                const columnInContent = contentArea.toUpperCase().indexOf(divName);
+                const columnInContent = match ? contentArea.indexOf(match[0]) : 0;
                 symbols.push({
                     name: divName,
                     type: 'division',
@@ -92,8 +94,9 @@ export class SymbolIndex {
                     if (idDiv) idDiv.endLine = i - 1;
                 }
                 dataDivisionStart = i;
+                const match = contentArea.match(/DATA\s+DIVISION/i);
                 const divName = 'DATA DIVISION';
-                const columnInContent = contentArea.toUpperCase().indexOf(divName);
+                const columnInContent = match ? contentArea.indexOf(match[0]) : 0;
                 symbols.push({
                     name: divName,
                     type: 'division',
@@ -118,8 +121,9 @@ export class SymbolIndex {
                     if (idDiv) idDiv.endLine = i - 1;
                 }
                 procedureDivisionStart = i;
+                const match = contentArea.match(/PROCEDURE\s+DIVISION/i);
                 const divName = 'PROCEDURE DIVISION';
-                const columnInContent = contentArea.toUpperCase().indexOf(divName);
+                const columnInContent = match ? contentArea.indexOf(match[0]) : 0;
                 symbols.push({
                     name: divName,
                     type: 'division',
