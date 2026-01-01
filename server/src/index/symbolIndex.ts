@@ -169,15 +169,34 @@ export class SymbolIndex {
             
             // PROCEDURE DIVISION内のパラグラフ・セクション
             if (inProcedureDivision) {
+                // コメント行（*から始まる行）をスキップ
+                if (trimmed.startsWith('*')) {
+                    continue;
+                }
+                
                 // パラグラフ:  カラム8から始まり、ピリオドで終わる
                 const paraMatch = contentArea.match(/^\s*([A-Z0-9\-]+)\./i);
-                if (paraMatch && ! contentArea.toUpperCase().includes('SECTION')) {
-                    symbols.push({
-                        name: paraMatch[1],
-                        type:  'paragraph',
-                        line: i,
-                        column: 8 + contentArea.indexOf(paraMatch[1])
-                    });
+                if (paraMatch && !contentArea.toUpperCase().includes('SECTION')) {
+                    const paraName = paraMatch[1].toUpperCase();
+                    
+                    // COBOL予約語や制御構文の終端キーワードを除外
+                    const excludedKeywords = [
+                        'END-IF', 'END-PERFORM', 'END-EVALUATE', 'END-READ', 
+                        'END-WRITE', 'END-SEARCH', 'END-CALL', 'END-COMPUTE',
+                        'END-ADD', 'END-SUBTRACT', 'END-MULTIPLY', 'END-DIVIDE',
+                        'END-RETURN', 'END-REWRITE', 'END-START', 'END-STRING',
+                        'END-UNSTRING', 'END-ACCEPT', 'END-DISPLAY', 'END-DELETE',
+                        'ELSE', 'WHEN', 'EXIT'
+                    ];
+                    
+                    if (!excludedKeywords.includes(paraName)) {
+                        symbols.push({
+                            name: paraMatch[1],
+                            type: 'paragraph',
+                            line: i,
+                            column: 8 + contentArea.indexOf(paraMatch[1])
+                        });
+                    }
                 }
                 
                 // セクション
