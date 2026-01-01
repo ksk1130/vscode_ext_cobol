@@ -14,7 +14,10 @@ import {
     Hover,
     MarkupContent,
     Diagnostic,
-    DiagnosticSeverity
+    DiagnosticSeverity,
+    DocumentSymbol,
+    DocumentSymbolParams,
+    SymbolKind
 } from 'vscode-languageserver/node';
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -23,7 +26,7 @@ import * as path from 'path';
 
 import { CopybookResolver } from './resolver/copybookResolver';
 import { ProgramResolver } from './resolver/programResolver';
-import { SymbolIndex } from './index/symbolIndex';
+import { SymbolIndex, SymbolInfo } from './index/symbolIndex';
 
 const connection = createConnection(ProposedFeatures.all);
 const documents = new TextDocuments(TextDocument);
@@ -64,7 +67,8 @@ connection.onInitialize((params:  InitializeParams) => {
             textDocumentSync:  TextDocumentSyncKind.Full,
             definitionProvider: true,
             referencesProvider: true,
-            hoverProvider: true
+            hoverProvider: true,
+            documentSymbolProvider: true
         }
     };
 });
@@ -188,6 +192,202 @@ connection.onHover((params: HoverParams): Hover | null => {
     connection.console.log(`[Hover] Symbol not found: ${word}`);
     return null;
 });
+
+/**
+ * ドキュメントシンボル（アウトライン）の提供を行う。
+ * @param params ドキュメントシンボル要求パラメータ
+ * @returns ドキュメントシンボルの配列。見つからない場合は空配列。
+ */
+connection.onDocumentSymbol((params: DocumentSymbolParams): DocumentSymbol[] => {
+    const document = documents.get(params.textDocument.uri);
+    if (!document) {
+        connection.console.log(`[DocumentSymbol] Document not found: ${params.textDocument.uri}`);
+        return [];
+    }
+    
+    // ドキュメントをインデックス化
+    symbolIndex.indexDocument(document);
+    loadCopybooksFromDocument(document);
+    
+    // すべてのシンボルを取得
+    const allSymbols = symbolIndex.getAllSymbols(document.uri);
+    connection.console.log(`[DocumentSymbol] Found ${allSymbols.length} symbols in document`);
+    
+    // DocumentSymbol形式に変換
+    return convertToDocumentSymbols(allSymbols, document);
+});
+
+/**
+ * SymbolInfo配列をDocumentSymbol配列に変換する。
+ * 変数の階層構造を考慮して、親子関係を構築する。
+ * Divisionはコンテナとして機能し、その中の要素を含む。
+ * @param symbols SymbolInfo配列
+ * @param document ドキュメント（行の長さ取得に使用）
+ * @returns DocumentSymbol配列（階層構造付き）
+ */
+function convertToDocumentSymbols(symbols: SymbolInfo[], document: TextDocument): DocumentSymbol[] {
+    const documentSymbols: DocumentSymbol[] = [];
+    const text = document.getText();
+    const lines = text.split('\n');
+    
+    // Division を検出してマップを作成
+    const divisions: Map<string, { symbol: DocumentSymbol; startLine: number; endLine: number }> = new Map();
+    
+    // まず Division を処理
+    for (const symbol of symbols) {
+        if (symbol.type === 'division') {
+            const lineText = lines[symbol.line] || '';
+            const lineLength = lineText.length;
+            const endLine = symbol.endLine !== undefined ? symbol.endLine : lines.length - 1;
+            const endLineText = lines[endLine] || '';
+            const endLineLength = endLineText.length;
+            
+            const range = Range.create(
+                Position.create(symbol.line, 0),
+                Position.create(endLine, endLineLength)
+            );
+            
+            const selectionRange = Range.create(
+                Position.create(symbol.line, symbol.column),
+                Position.create(symbol.line, symbol.column + symbol.name.length)
+            );
+            
+            const docSymbol: DocumentSymbol = {
+                name: symbol.name,
+                detail: undefined,
+                kind: SymbolKind.Module,
+                range: range,
+                selectionRange: selectionRange,
+                children: []
+            };
+            
+            documentSymbols.push(docSymbol);
+            divisions.set(symbol.name, {
+                symbol: docSymbol,
+                startLine: symbol.line,
+                endLine: endLine
+            });
+        }
+    }
+    
+    // Division 内の変数をグループ化するためのスタック
+    const variableStack: { symbol: DocumentSymbol; level: number }[] = [];
+    let currentDivision: DocumentSymbol | null = null;
+    
+    // 次に Division 以外のシンボルを処理
+    for (const symbol of symbols) {
+        if (symbol.type === 'division') continue;
+        
+        const symbolKind = getSymbolKind(symbol.type);
+        const symbolName = symbol.name;
+        
+        // シンボルの範囲を設定（実際の行の長さを使用）
+        const lineText = lines[symbol.line] || '';
+        const lineLength = lineText.length;
+        const range = Range.create(
+            Position.create(symbol.line, 0),
+            Position.create(symbol.line, lineLength)
+        );
+        
+        // 選択範囲（シンボル名自体）
+        const selectionRange = Range.create(
+            Position.create(symbol.line, symbol.column),
+            Position.create(symbol.line, symbol.column + symbolName.length)
+        );
+        
+        // 詳細情報を構築
+        let detail = '';
+        if (symbol.level !== undefined) {
+            detail = `Level ${symbol.level}`;
+        }
+        if (symbol.picture) {
+            detail += detail ? ` PIC ${symbol.picture}` : `PIC ${symbol.picture}`;
+        }
+        
+        const docSymbol: DocumentSymbol = {
+            name: symbolName,
+            detail: detail || undefined,
+            kind: symbolKind,
+            range: range,
+            selectionRange: selectionRange,
+            children: []
+        };
+        
+        // このシンボルが属する Division を特定
+        let belongsToDivision: DocumentSymbol | null = null;
+        for (const [divName, divInfo] of divisions.entries()) {
+            if (symbol.line >= divInfo.startLine && symbol.line <= divInfo.endLine) {
+                belongsToDivision = divInfo.symbol;
+                break;
+            }
+        }
+        
+        // 変数の場合、レベルに基づいて階層構造を構築
+        if (symbol.type === 'variable' && symbol.level !== undefined) {
+            const currentLevel = symbol.level;
+            
+            // Division が変わったらスタックをクリア
+            if (belongsToDivision !== currentDivision) {
+                variableStack.length = 0;
+                currentDivision = belongsToDivision;
+            }
+            
+            // スタックから現在のレベル以下のシンボルを削除
+            while (variableStack.length > 0 && variableStack[variableStack.length - 1].level >= currentLevel) {
+                variableStack.pop();
+            }
+            
+            if (variableStack.length > 0) {
+                // 親変数の子として追加
+                const parent = variableStack[variableStack.length - 1].symbol;
+                if (parent.children) {
+                    parent.children.push(docSymbol);
+                }
+            } else if (belongsToDivision && belongsToDivision.children) {
+                // Division の直接の子として追加
+                belongsToDivision.children.push(docSymbol);
+            } else {
+                // Division がない場合はルートレベルに追加
+                documentSymbols.push(docSymbol);
+            }
+            
+            // スタックに追加（88レベルは親にならない）
+            if (currentLevel !== 88) {
+                variableStack.push({ symbol: docSymbol, level: currentLevel });
+            }
+        } else {
+            // パラグラフやセクションは Division の子として追加
+            if (belongsToDivision && belongsToDivision.children) {
+                belongsToDivision.children.push(docSymbol);
+            } else {
+                // Division がない場合はルートレベルに追加
+                documentSymbols.push(docSymbol);
+            }
+        }
+    }
+    
+    return documentSymbols;
+}
+
+/**
+ * シンボルタイプからVS CodeのSymbolKindに変換する。
+ * @param symbolType シンボルタイプ ('variable', 'paragraph', 'section', 'division')
+ * @returns SymbolKind
+ */
+function getSymbolKind(symbolType: string): SymbolKind {
+    switch (symbolType) {
+        case 'variable':
+            return SymbolKind.Variable;
+        case 'paragraph':
+            return SymbolKind.Function;
+        case 'section':
+            return SymbolKind.Class;
+        case 'division':
+            return SymbolKind.Module;
+        default:
+            return SymbolKind.Variable;
+    }
+}
 
 /**
  * 記号情報からホバー表示用のコンテンツを生成する。
