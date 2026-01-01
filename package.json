@@ -54,7 +54,7 @@
         "cobol.trace.server": {
           "type": "string",
           "enum": ["off", "messages", "verbose"],
-          "default": "off",
+          "default": "verbose",
           "description": "LSPサーバーのトレースレベル"
         }
       }
