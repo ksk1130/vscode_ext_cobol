@@ -1,0 +1,37 @@
+# Source files
+client/src/**
+server/src/**
+*.ts
+!client/out/**/*.d.ts
+!server/out/**/*.d.ts
+
+# Build configuration
+client/tsconfig.json
+server/tsconfig.json
+.vscode/**
+.gitignore
+
+# Development files
+build-vsix.bat
+build-vsix.sh
+examples/**
+
+# Dependencies (will be bundled separately)
+node_modules/**
+!node_modules/vscode-languageclient/**
+!node_modules/vscode-languageserver/**
+!node_modules/vscode-languageserver-textdocument/**
+!node_modules/vscode-uri/**
+!node_modules/vscode-languageserver-protocol/**
+!node_modules/vscode-jsonrpc/**
+
+# Package management
+package-lock.json
+npm-debug.log*
+
+# Git
+.git/**
+.github/**
+
+# Editor
+*.vsix
