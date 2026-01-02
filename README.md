@@ -1,10 +1,17 @@
 # COBOL Language Server Extension
 
-COBOL 向けの VS Code 拡張機能です。COBOL ソース (.cbl/.cob/.cobol/.cpy) に対して定義ジャンプ、ホバー、診断などの機能を提供します。
+COBOL 向けの VS Code 拡張機能です。COBOL ソース (.cbl/.cob/.cobol/.cpy) に対して定義ジャンプ、ホバー、診断、**IntelliSense（自動補完）**などの機能を提供します。
 
 ## 機能
 - 変数・COPYBOOK・段落/節 (PERFORM)・プログラム呼び出し (CALL) への定義ジャンプ
 - ホバー表示（レベル、PIC、行/桁、定義ファイル名を表示。COPYBOOK 由来も表示）
+- **IntelliSense（自動補完）機能**
+  - COBOLキーワード（MOVE, PERFORM, IF, CALL など）の自動補完
+  - 変数名の補完（現在のドキュメントとCOPYBOOK内の変数）
+  - PERFORM文でのパラグラフ/セクション名の補完
+  - CALL文でのプログラム名の補完
+  - COPY文でのCOPYBOOK名の補完
+- **シグネチャヘルプ**（CALL文でのパラメータヒント）
 - COPYBOOK の REPLACING,DISJOINING/JOINING による接頭辞置換をサポート
 - COPYBOOK 検索パス（ワークスペース内の `copybooks/`、`copy/`、環境変数 `COBOL_COPYPATH`）
 - TextMate ベースのシンタックスハイライト
@@ -90,6 +97,14 @@ code --install-extension <package-name>-<version>.vsix
   - CALL → ワークスペース内の PROGRAM-ID へジャンプ
   - COPYBOOK 定義の変数（REPLACING / DISJOINING / JOINING を含む）が解決される
 - 変数にホバーしてレベル/PIC/行/ファイル名が表示される
+- **IntelliSense機能**:
+  - COBOLコードを入力中に Ctrl+Space で補完候補が表示される
+  - MOVE, PERFORM, IF などのキーワードが補完される
+  - 変数名を入力すると定義済み変数が候補として表示される
+  - PERFORM の後でパラグラフ/セクション名が補完される
+  - CALL の後でプログラム名が補完される
+  - COPY の後で COPYBOOK 名が補完される
+  - CALL文入力時にパラメータヒント（シグネチャヘルプ）が表示される
 - Problems パネルに未定義代入や未使用シンボルが出ることを確認
 - アウトラインビュー (Ctrl+Shift+O または View → Outline) で変数・段落・セクションの階層構造が表示される
 
