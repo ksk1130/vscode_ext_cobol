@@ -110,6 +110,14 @@ export class ProgramResolver {
     }
     
     /**
+     * すべてのプログラムを取得
+     * @returns ProgramInfo配列
+     */
+    getAllPrograms(): ProgramInfo[] {
+        return Array.from(this.programIndex.values());
+    }
+    
+    /**
      * ワークスペース内のCOBOLファイルを再帰的に検索
      * @param dir 検索ディレクトリ
      * @returns COBOLファイルパス配列
