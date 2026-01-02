@@ -31,6 +31,7 @@ import {
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { URI } from 'vscode-uri';
 import * as path from 'path';
+import * as fs from 'fs';
 
 import { CopybookResolver } from './resolver/copybookResolver';
 import { ProgramResolver } from './resolver/programResolver';
@@ -254,22 +255,33 @@ connection.onCompletion((params: CompletionParams): CompletionItem[] => {
     const contentLine = stripSequenceArea(line);
     const trimmedLine = contentLine.trim().toUpperCase();
     
-    // 1. COPY文の場合、COPYBOOKの補完候補を提供
+    // 1. COPY文の場合、COPYBOOKの補完候補を提供（最優先）
     if (trimmedLine.startsWith('COPY')) {
         const copybookCompletions = getCopybookCompletions(document);
         completions.push(...copybookCompletions);
+        return completions;
     }
     
     // 2. PERFORM文の場合、パラグラフ/セクションの補完候補を提供
     if (trimmedLine.startsWith('PERFORM')) {
         const paragraphCompletions = getParagraphCompletions(document);
         completions.push(...paragraphCompletions);
+        // キーワードも追加（PERFORM UNTIL など）
+        const keywordCompletions = getCobolKeywords();
+        completions.push(...keywordCompletions);
+        return completions;
     }
     
     // 3. CALL文の場合、プログラム名の補完候補を提供
     if (trimmedLine.includes('CALL')) {
         const programCompletions = getProgramCompletions();
         completions.push(...programCompletions);
+        // CALL 文でも変数やキーワードが必要な場合がある（USING句など）
+        const variableCompletions = getVariableCompletions(document);
+        completions.push(...variableCompletions);
+        const keywordCompletions = getCobolKeywords();
+        completions.push(...keywordCompletions);
+        return completions;
     }
     
     // 4. 通常のコンテキストでは、変数とキーワードの補完候補を提供
@@ -954,8 +966,6 @@ function getCopybookCompletions(document: TextDocument): CompletionItem[] {
     const sourceFileDir = path.dirname(URI.parse(document.uri).fsPath);
     
     try {
-        const fs = require('fs');
-        
         // COPYBOOK 検索パスから候補を取得
         const searchPaths = [
             workspaceRoot ? path.join(workspaceRoot, 'copybooks') : '',
@@ -984,7 +994,7 @@ function getCopybookCompletions(document: TextDocument): CompletionItem[] {
             }
         }
     } catch (err) {
-        // エラーは無視
+        connection.console.log(`[getCopybookCompletions] Error reading copybook directories: ${err}`);
     }
     
     return completions;
@@ -997,21 +1007,17 @@ function getCopybookCompletions(document: TextDocument): CompletionItem[] {
 function getProgramCompletions(): CompletionItem[] {
     const completions: CompletionItem[] = [];
     
-    // ワークスペースをインデックス化
-    if (workspaceRoot) {
-        programResolver.indexWorkspace(workspaceRoot);
-        
-        // 登録されているプログラム名を取得
-        const programs = programResolver.getAllPrograms();
-        
-        for (const program of programs) {
-            completions.push({
-                label: program.programId,
-                kind: CompletionItemKind.Module,
-                detail: `Program from ${path.basename(program.filePath)}`,
-                insertText: `"${program.programId}"`
-            });
-        }
+    // ワークスペースは初期化時にすでにインデックス化されている
+    // 登録されているプログラム名を取得
+    const programs = programResolver.getAllPrograms();
+    
+    for (const program of programs) {
+        completions.push({
+            label: program.programId,
+            kind: CompletionItemKind.Module,
+            detail: `Program from ${path.basename(program.filePath)}`,
+            insertText: `"${program.programId}"`
+        });
     }
     
     return completions;
