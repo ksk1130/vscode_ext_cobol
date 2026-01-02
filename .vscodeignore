@@ -1,0 +1,28 @@
+# Source files
+client/src/**
+server/src/**
+*.ts
+!client/out/**/*.d.ts
+!server/out/**/*.d.ts
+
+# Build configuration
+client/tsconfig.json
+server/tsconfig.json
+.vscode/**
+.gitignore
+
+# Development files
+build-vsix.bat
+build-vsix.sh
+examples/**
+
+# Package management
+package-lock.json
+npm-debug.log*
+
+# Git
+.git/**
+.github/**
+
+# Editor
+*.vsix
