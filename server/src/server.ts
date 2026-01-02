@@ -890,7 +890,8 @@ function validateDocument(document: TextDocument): void {
         
         // MOVE文の型・サイズチェック
         if (normalizedLine.includes('MOVE') && normalizedLine.includes('TO')) {
-            const moveMatch = contentLine.match(/MOVE\s+([A-Z0-9.\-]+)\s+TO\s+([A-Z0-9.\-]+)/i);
+            // 修飾名（RECORD.FIELD）と単純名の両方をサポートし、末尾のピリオドは除外
+            const moveMatch = contentLine.match(/MOVE\s+([A-Z0-9\-]+(?:\.[A-Z0-9\-]+)*)\s+TO\s+([A-Z0-9\-]+(?:\.[A-Z0-9\-]+)*)/i);
             if (moveMatch) {
                 const sourceName = moveMatch[1];
                 const targetName = moveMatch[2];
@@ -902,20 +903,24 @@ function validateDocument(document: TextDocument): void {
                 const isSpecialConstant = specialConstants.includes(sourceName.toUpperCase());
                 
                 if (!isLiteral && !isSpecialConstant) {
+                    // 修飾名の場合は最後の部分のみを使用（簡略化のため）
+                    const sourceBaseName = sourceName.includes('.') ? sourceName.split('.').pop()! : sourceName;
+                    const targetBaseName = targetName.includes('.') ? targetName.split('.').pop()! : targetName;
+                    
                     // 代入元と代入先の変数情報を取得
-                    let sourceSymbol = symbolIndex.findSymbol(document.uri, sourceName);
+                    let sourceSymbol = symbolIndex.findSymbol(document.uri, sourceBaseName);
                     if (!sourceSymbol) {
                         // コピーブック内を検索
-                        const copybookResult = searchInCopybooksWithPath(document, sourceName);
+                        const copybookResult = searchInCopybooksWithPath(document, sourceBaseName);
                         if (copybookResult) {
                             sourceSymbol = copybookResult.symbol;
                         }
                     }
                     
-                    let targetSymbol = symbolIndex.findSymbol(document.uri, targetName);
+                    let targetSymbol = symbolIndex.findSymbol(document.uri, targetBaseName);
                     if (!targetSymbol) {
                         // コピーブック内を検索
-                        const copybookResult = searchInCopybooksWithPath(document, targetName);
+                        const copybookResult = searchInCopybooksWithPath(document, targetBaseName);
                         if (copybookResult) {
                             targetSymbol = copybookResult.symbol;
                         }
@@ -927,7 +932,7 @@ function validateDocument(document: TextDocument): void {
                         const targetInfo = parsePicture(targetSymbol.picture);
                         
                         if (sourceInfo && targetInfo) {
-                            const warningMessage = checkTypeCompatibility(sourceInfo, targetInfo, sourceName, targetName);
+                            const warningMessage = checkTypeCompatibility(sourceInfo, targetInfo, sourceBaseName, targetBaseName);
                             if (warningMessage) {
                                 const targetIndex = contentLine.toUpperCase().indexOf(targetName.toUpperCase());
                                 // シーケンス領域を考慮した文字位置を計算
