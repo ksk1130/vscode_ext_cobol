@@ -706,9 +706,9 @@ function parsePicture(picture: string | undefined): PictureInfo | null {
         // V (decimal point) の前後を分けて処理
         const parts = pic.split('V');
         
-        // 整数部分
+        // 整数部分 (S符号も考慮)
         const integerPart = parts[0];
-        const intMatch = integerPart.match(/9(\((\d+)\))?/g);
+        const intMatch = integerPart.match(/S?9(\((\d+)\))?/g);
         if (intMatch) {
             for (const match of intMatch) {
                 const count = match.match(/\((\d+)\)/);
@@ -884,14 +884,15 @@ function validateDocument(document: TextDocument): void {
         
         // MOVE文の型・サイズチェック
         if (normalizedLine.includes('MOVE') && normalizedLine.includes('TO')) {
-            const moveMatch = contentLine.match(/MOVE\s+([A-Z0-9\-]+)\s+TO\s+([A-Z0-9\-]+)/i);
+            const moveMatch = contentLine.match(/MOVE\s+([A-Z0-9\-\.]+)\s+TO\s+([A-Z0-9\-\.]+)/i);
             if (moveMatch) {
                 const sourceName = moveMatch[1];
                 const targetName = moveMatch[2];
                 
                 // 定数（リテラル）や特殊定数は除外
                 const specialConstants = ['SPACES', 'SPACE', 'ZEROS', 'ZERO', 'ZEROES', 'HIGH-VALUE', 'HIGH-VALUES', 'LOW-VALUE', 'LOW-VALUES', 'QUOTE', 'QUOTES', 'NULL', 'NULLS'];
-                const isLiteral = /^[\d"']+$/.test(sourceName);
+                // 数値リテラルまたは引用符で囲まれた文字列リテラルを検出
+                const isLiteral = /^[\d.]+$/.test(sourceName) || /^["'].*["']$/.test(sourceName);
                 const isSpecialConstant = specialConstants.includes(sourceName.toUpperCase());
                 
                 if (!isLiteral && !isSpecialConstant) {
