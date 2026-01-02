@@ -827,17 +827,17 @@ function checkTypeCompatibility(sourceInfo: PictureInfo, targetInfo: PictureInfo
  * @param document 診断対象ドキュメント
  */
 function validateDocument(document: TextDocument): void {
+    // COPYBOOK（.cpy）ファイルは診断をスキップ
+    const isCopybook = /\.cpy$/i.test(document.uri);
+    if (isCopybook) {
+        connection.sendDiagnostics({ uri: document.uri, diagnostics: [] });
+        return;
+    }
+    
     try {
         const text = document.getText();
         const lines = text.split('\n');
         const diagnostics: Diagnostic[] = [];
-        
-        // COPYBOOK（.cpy）ファイルは診断をスキップ
-        const isCopybook = /\.cpy$/i.test(document.uri);
-        if (isCopybook) {
-            connection.sendDiagnostics({ uri: document.uri, diagnostics: [] });
-            return;
-        }
         
         // コピーブックを事前にロードしてインデックス化
         loadCopybooksFromDocument(document);
@@ -1039,7 +1039,8 @@ function validateDocument(document: TextDocument): void {
     connection.sendDiagnostics({ uri: document.uri, diagnostics });
     } catch (err) {
         // エラーが発生した場合はログに記録し、空の診断を送信
-        connection.console.error(`[validateDocument] Error: ${err}`);
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        connection.console.error(`[validateDocument] Error: ${errorMessage}`);
         connection.sendDiagnostics({ uri: document.uri, diagnostics: [] });
     }
 }
