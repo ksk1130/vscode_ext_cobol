@@ -16,16 +16,6 @@ build-vsix.bat
 build-vsix.sh
 examples/**
 
-# Dependencies (will be bundled separately)
-node_modules/**
-!node_modules/vscode-languageclient/**
-!node_modules/vscode-languageserver/**
-!node_modules/vscode-languageserver-textdocument/**
-!node_modules/vscode-languageserver-types/**
-!node_modules/vscode-uri/**
-!node_modules/vscode-languageserver-protocol/**
-!node_modules/vscode-jsonrpc/**
-
 # Package management
 package-lock.json
 npm-debug.log*
