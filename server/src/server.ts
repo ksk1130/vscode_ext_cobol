@@ -889,8 +889,12 @@ function validateDocument(document: TextDocument): void {
                 const sourceName = moveMatch[1];
                 const targetName = moveMatch[2];
                 
-                // 定数（リテラル）は除外
-                if (!/^[\d"']+$/.test(sourceName)) {
+                // 定数（リテラル）や特殊定数は除外
+                const specialConstants = ['SPACES', 'SPACE', 'ZEROS', 'ZERO', 'ZEROES', 'HIGH-VALUE', 'HIGH-VALUES', 'LOW-VALUE', 'LOW-VALUES', 'QUOTE', 'QUOTES', 'NULL', 'NULLS'];
+                const isLiteral = /^[\d"']+$/.test(sourceName);
+                const isSpecialConstant = specialConstants.includes(sourceName.toUpperCase());
+                
+                if (!isLiteral && !isSpecialConstant) {
                     // 代入元と代入先の変数情報を取得
                     let sourceSymbol = symbolIndex.findSymbol(document.uri, sourceName);
                     if (!sourceSymbol) {

@@ -8,7 +8,10 @@ COBOL 向けの VS Code 拡張機能です。COBOL ソース (.cbl/.cob/.cobol/.
 - COPYBOOK の REPLACING,DISJOINING/JOINING による接頭辞置換をサポート
 - COPYBOOK 検索パス（ワークスペース内の `copybooks/`、`copy/`、環境変数 `COBOL_COPYPATH`）
 - TextMate ベースのシンタックスハイライト
-- 診断: 未定義への代入警告、未使用シンボルのヒント（グループ項目に配慮）
+- 診断: 
+  - 未定義への代入警告
+  - 未使用シンボルのヒント（グループ項目に配慮）
+  - 型・サイズ不一致の警告（MOVE 文で型やサイズが異なる変数への代入を検出）
 - アウトライン表示: VS Code のアウトラインビューに変数・段落・セクションを階層表示
 
 ## プロジェクト構成
@@ -91,6 +94,10 @@ code --install-extension <package-name>-<version>.vsix
   - COPYBOOK 定義の変数（REPLACING / DISJOINING / JOINING を含む）が解決される
 - 変数にホバーしてレベル/PIC/行/ファイル名が表示される
 - Problems パネルに未定義代入や未使用シンボルが出ることを確認
+- 型・サイズ不一致の警告を確認:
+  - 数値型(PIC 9)と英数字型(PIC X)の混在
+  - サイズが小さい変数への代入による切り捨ての可能性
+  - 小数点以下の精度が異なる代入
 - アウトラインビュー (Ctrl+Shift+O または View → Outline) で変数・段落・セクションの階層構造が表示される
 
 ## スクリプト
