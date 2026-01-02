@@ -697,7 +697,7 @@ function parsePicture(picture: string | undefined): PictureInfo | null {
     const pic = picture.toUpperCase().trim();
     
     // 数値型: 9, S9, V (decimal point)
-    // 例: 9(8), S9(5), 9(5)V99, S9(3)V9(2)
+    // 例: 9(8), S9(5), 9(5)V99, S9(3)V9(2), S999, 999
     if (pic.includes('9')) {
         let size = 0;
         let decimalPlaces = 0;
@@ -706,25 +706,31 @@ function parsePicture(picture: string | undefined): PictureInfo | null {
         // V (decimal point) の前後を分けて処理
         const parts = pic.split('V');
         
-        // 整数部分 (S符号も考慮)
+        // 整数部分 (S符号も考慮、連続する9も処理)
         const integerPart = parts[0];
-        const intMatch = integerPart.match(/S?9(\((\d+)\))?/g);
+        // S符号を除去して9の数をカウント
+        const integerDigits = integerPart.replace(/S/g, '');
+        const intMatch = integerDigits.match(/9(\((\d+)\))?/g);
         if (intMatch) {
             for (const match of intMatch) {
-                const count = match.match(/\((\d+)\)/);
-                size += count ? parseInt(count[1]) : 1;
+                const parenMatch = match.match(/\((\d+)\)/);
+                if (parenMatch) {
+                    size += parseInt(parenMatch[1]);
+                } else {
+                    size += 1;
+                }
             }
         }
         
-        // 小数部分
+        // 小数部分 (連続する9も処理)
         if (parts.length > 1) {
             hasDecimal = true;
             const decimalPart = parts[1];
             const decMatch = decimalPart.match(/9(\((\d+)\))?/g);
             if (decMatch) {
                 for (const match of decMatch) {
-                    const count = match.match(/\((\d+)\)/);
-                    const places = count ? parseInt(count[1]) : 1;
+                    const parenMatch = match.match(/\((\d+)\)/);
+                    const places = parenMatch ? parseInt(parenMatch[1]) : 1;
                     decimalPlaces += places;
                     size += places;
                 }
@@ -884,15 +890,15 @@ function validateDocument(document: TextDocument): void {
         
         // MOVE文の型・サイズチェック
         if (normalizedLine.includes('MOVE') && normalizedLine.includes('TO')) {
-            const moveMatch = contentLine.match(/MOVE\s+([A-Z0-9\-\.]+)\s+TO\s+([A-Z0-9\-\.]+)/i);
+            const moveMatch = contentLine.match(/MOVE\s+([A-Z0-9.\-]+)\s+TO\s+([A-Z0-9.\-]+)/i);
             if (moveMatch) {
                 const sourceName = moveMatch[1];
                 const targetName = moveMatch[2];
                 
                 // 定数（リテラル）や特殊定数は除外
                 const specialConstants = ['SPACES', 'SPACE', 'ZEROS', 'ZERO', 'ZEROES', 'HIGH-VALUE', 'HIGH-VALUES', 'LOW-VALUE', 'LOW-VALUES', 'QUOTE', 'QUOTES', 'NULL', 'NULLS'];
-                // 数値リテラルまたは引用符で囲まれた文字列リテラルを検出
-                const isLiteral = /^[\d.]+$/.test(sourceName) || /^["'].*["']$/.test(sourceName);
+                // 数値リテラル（整数または小数）または引用符で囲まれた文字列リテラルを検出
+                const isLiteral = /^\d+(\.\d+)?$/.test(sourceName) || /^["'].*["']$/.test(sourceName);
                 const isSpecialConstant = specialConstants.includes(sourceName.toUpperCase());
                 
                 if (!isLiteral && !isSpecialConstant) {
@@ -924,11 +930,13 @@ function validateDocument(document: TextDocument): void {
                             const warningMessage = checkTypeCompatibility(sourceInfo, targetInfo, sourceName, targetName);
                             if (warningMessage) {
                                 const targetIndex = contentLine.toUpperCase().indexOf(targetName.toUpperCase());
+                                // シーケンス領域を考慮した文字位置を計算
+                                const sequenceAreaLength = Math.min(7, line.length);
                                 diagnostics.push({
                                     severity: DiagnosticSeverity.Warning,
                                     range: {
-                                        start: { line: i, character: 8 + targetIndex },
-                                        end: { line: i, character: 8 + targetIndex + targetName.length }
+                                        start: { line: i, character: sequenceAreaLength + targetIndex },
+                                        end: { line: i, character: sequenceAreaLength + targetIndex + targetName.length }
                                     },
                                     message: warningMessage,
                                     source: 'cobol-lsp'
