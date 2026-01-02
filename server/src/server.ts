@@ -677,6 +677,150 @@ function stripSequenceArea(line: string): string {
 }
 
 /**
+ * PIC句の情報を表すインターフェース
+ */
+interface PictureInfo {
+    type: 'numeric' | 'alphabetic' | 'alphanumeric' | 'unknown';
+    size: number;
+    hasDecimal: boolean;
+    decimalPlaces: number;
+}
+
+/**
+ * PIC句を解析して型とサイズ情報を抽出する。
+ * @param picture PIC句文字列 (例: "9(8)", "X(50)", "9(5)V99")
+ * @returns PictureInfo オブジェクト
+ */
+function parsePicture(picture: string | undefined): PictureInfo | null {
+    if (!picture) return null;
+    
+    const pic = picture.toUpperCase().trim();
+    
+    // 数値型: 9, S9, V (decimal point)
+    // 例: 9(8), S9(5), 9(5)V99, S9(3)V9(2)
+    if (pic.includes('9')) {
+        let size = 0;
+        let decimalPlaces = 0;
+        let hasDecimal = false;
+        
+        // V (decimal point) の前後を分けて処理
+        const parts = pic.split('V');
+        
+        // 整数部分
+        const integerPart = parts[0];
+        const intMatch = integerPart.match(/9(\((\d+)\))?/g);
+        if (intMatch) {
+            for (const match of intMatch) {
+                const count = match.match(/\((\d+)\)/);
+                size += count ? parseInt(count[1]) : 1;
+            }
+        }
+        
+        // 小数部分
+        if (parts.length > 1) {
+            hasDecimal = true;
+            const decimalPart = parts[1];
+            const decMatch = decimalPart.match(/9(\((\d+)\))?/g);
+            if (decMatch) {
+                for (const match of decMatch) {
+                    const count = match.match(/\((\d+)\)/);
+                    const places = count ? parseInt(count[1]) : 1;
+                    decimalPlaces += places;
+                    size += places;
+                }
+            }
+        }
+        
+        return {
+            type: 'numeric',
+            size: size,
+            hasDecimal: hasDecimal,
+            decimalPlaces: decimalPlaces
+        };
+    }
+    
+    // 英字型: A
+    // 例: A(20)
+    if (pic.includes('A')) {
+        let size = 0;
+        const matches = pic.match(/A(\((\d+)\))?/g);
+        if (matches) {
+            for (const match of matches) {
+                const count = match.match(/\((\d+)\)/);
+                size += count ? parseInt(count[1]) : 1;
+            }
+        }
+        return {
+            type: 'alphabetic',
+            size: size,
+            hasDecimal: false,
+            decimalPlaces: 0
+        };
+    }
+    
+    // 英数字型: X
+    // 例: X(50), X(10)
+    if (pic.includes('X')) {
+        let size = 0;
+        const matches = pic.match(/X(\((\d+)\))?/g);
+        if (matches) {
+            for (const match of matches) {
+                const count = match.match(/\((\d+)\)/);
+                size += count ? parseInt(count[1]) : 1;
+            }
+        }
+        return {
+            type: 'alphanumeric',
+            size: size,
+            hasDecimal: false,
+            decimalPlaces: 0
+        };
+    }
+    
+    return {
+        type: 'unknown',
+        size: 0,
+        hasDecimal: false,
+        decimalPlaces: 0
+    };
+}
+
+/**
+ * 2つの変数の型とサイズの互換性をチェックする。
+ * @param sourceInfo 代入元のPictureInfo
+ * @param targetInfo 代入先のPictureInfo
+ * @returns 警告メッセージ。互換性がある場合はnull。
+ */
+function checkTypeCompatibility(sourceInfo: PictureInfo, targetInfo: PictureInfo, sourceName: string, targetName: string): string | null {
+    // 型が異なる場合
+    if (sourceInfo.type !== targetInfo.type) {
+        // 数値型と英数字型の混在
+        if ((sourceInfo.type === 'numeric' && targetInfo.type === 'alphanumeric') ||
+            (sourceInfo.type === 'alphanumeric' && targetInfo.type === 'numeric')) {
+            return `型の不一致: '${sourceName}' (${sourceInfo.type}) から '${targetName}' (${targetInfo.type}) への代入`;
+        }
+        // 英字型と他の型の混在
+        if (sourceInfo.type === 'alphabetic' || targetInfo.type === 'alphabetic') {
+            return `型の不一致: '${sourceName}' (${sourceInfo.type}) から '${targetName}' (${targetInfo.type}) への代入`;
+        }
+    }
+    
+    // サイズが異なる場合（精度が落ちる可能性がある）
+    if (sourceInfo.size > targetInfo.size) {
+        return `サイズ不一致: '${sourceName}' (サイズ ${sourceInfo.size}) から '${targetName}' (サイズ ${targetInfo.size}) への代入により、データが切り捨てられる可能性があります`;
+    }
+    
+    // 小数点の精度が異なる場合
+    if (sourceInfo.type === 'numeric' && targetInfo.type === 'numeric') {
+        if (sourceInfo.decimalPlaces > targetInfo.decimalPlaces) {
+            return `小数点以下の精度不一致: '${sourceName}' (小数点以下 ${sourceInfo.decimalPlaces} 桁) から '${targetName}' (小数点以下 ${targetInfo.decimalPlaces} 桁) への代入により、精度が失われる可能性があります`;
+        }
+    }
+    
+    return null;
+}
+
+/**
  * ドキュメントを診断し、未定義変数や未使用変数の警告を生成する。
  * @param document 診断対象ドキュメント
  */
@@ -737,6 +881,59 @@ function validateDocument(document: TextDocument): void {
         
         // コメント行はスキップ
         if (normalizedLine.startsWith('*')) continue;
+        
+        // MOVE文の型・サイズチェック
+        if (normalizedLine.includes('MOVE') && normalizedLine.includes('TO')) {
+            const moveMatch = contentLine.match(/MOVE\s+([A-Z0-9\-]+)\s+TO\s+([A-Z0-9\-]+)/i);
+            if (moveMatch) {
+                const sourceName = moveMatch[1];
+                const targetName = moveMatch[2];
+                
+                // 定数（リテラル）は除外
+                if (!/^[\d"']+$/.test(sourceName)) {
+                    // 代入元と代入先の変数情報を取得
+                    let sourceSymbol = symbolIndex.findSymbol(document.uri, sourceName);
+                    if (!sourceSymbol) {
+                        // コピーブック内を検索
+                        const copybookResult = searchInCopybooksWithPath(document, sourceName);
+                        if (copybookResult) {
+                            sourceSymbol = copybookResult.symbol;
+                        }
+                    }
+                    
+                    let targetSymbol = symbolIndex.findSymbol(document.uri, targetName);
+                    if (!targetSymbol) {
+                        // コピーブック内を検索
+                        const copybookResult = searchInCopybooksWithPath(document, targetName);
+                        if (copybookResult) {
+                            targetSymbol = copybookResult.symbol;
+                        }
+                    }
+                    
+                    // 両方の変数が定義されている場合のみチェック
+                    if (sourceSymbol && targetSymbol && sourceSymbol.picture && targetSymbol.picture) {
+                        const sourceInfo = parsePicture(sourceSymbol.picture);
+                        const targetInfo = parsePicture(targetSymbol.picture);
+                        
+                        if (sourceInfo && targetInfo) {
+                            const warningMessage = checkTypeCompatibility(sourceInfo, targetInfo, sourceName, targetName);
+                            if (warningMessage) {
+                                const targetIndex = contentLine.toUpperCase().indexOf(targetName.toUpperCase());
+                                diagnostics.push({
+                                    severity: DiagnosticSeverity.Warning,
+                                    range: {
+                                        start: { line: i, character: 8 + targetIndex },
+                                        end: { line: i, character: 8 + targetIndex + targetName.length }
+                                    },
+                                    message: warningMessage,
+                                    source: 'cobol-lsp'
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
         
         // MOVE, ADD, COMPUTE, IF, EVALUATE などで使用される変数を抽出
         const words = contentLine.match(/\b[A-Z][A-Z0-9\-]+\b/gi);
