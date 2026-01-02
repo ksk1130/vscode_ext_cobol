@@ -8,6 +8,7 @@
            05  NUM-SHORT      PIC 9(3).
            05  NUM-LONG       PIC 9(8).
            05  NUM-DECIMAL    PIC 9(5)V99.
+           05  NUM-DECIMAL2   PIC 9(5)V9.
        
        01  ALPHA-VARS.
            05  ALPHA-SHORT    PIC X(10).
@@ -31,7 +32,10 @@
       *    WARNING: Type mismatch (alphanumeric to numeric)
            MOVE ALPHA-SHORT TO NUM-SHORT.
            
-      *    WARNING: Decimal precision loss
+      *    WARNING: Decimal precision loss (2 decimals to 0)
            MOVE NUM-DECIMAL TO NUM-SHORT.
+           
+      *    WARNING: Decimal precision loss (2 decimals to 1)
+           MOVE NUM-DECIMAL TO NUM-DECIMAL2.
            
            STOP RUN.

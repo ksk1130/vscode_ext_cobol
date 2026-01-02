@@ -805,16 +805,16 @@ function checkTypeCompatibility(sourceInfo: PictureInfo, targetInfo: PictureInfo
         }
     }
     
-    // サイズが異なる場合（精度が落ちる可能性がある）
-    if (sourceInfo.size > targetInfo.size) {
-        return `サイズ不一致: '${sourceName}' (サイズ ${sourceInfo.size}) から '${targetName}' (サイズ ${targetInfo.size}) への代入により、データが切り捨てられる可能性があります`;
-    }
-    
-    // 小数点の精度が異なる場合
+    // 数値型の場合、小数点の精度を優先してチェック
     if (sourceInfo.type === 'numeric' && targetInfo.type === 'numeric') {
         if (sourceInfo.decimalPlaces > targetInfo.decimalPlaces) {
             return `小数点以下の精度不一致: '${sourceName}' (小数点以下 ${sourceInfo.decimalPlaces} 桁) から '${targetName}' (小数点以下 ${targetInfo.decimalPlaces} 桁) への代入により、精度が失われる可能性があります`;
         }
+    }
+    
+    // サイズが異なる場合（精度が落ちる可能性がある）
+    if (sourceInfo.size > targetInfo.size) {
+        return `サイズ不一致: '${sourceName}' (サイズ ${sourceInfo.size}) から '${targetName}' (サイズ ${targetInfo.size}) への代入により、データが切り捨てられる可能性があります`;
     }
     
     return null;
