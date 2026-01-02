@@ -542,9 +542,7 @@ function searchInCopybooksWithPath(document: TextDocument, word: string): { symb
     const lines = text.split('\n');
     const sourceFileDir = path.dirname(URI.parse(document.uri).fsPath);
     
-    // コピーブックをロードしてインデックスする
-    loadCopybooksFromDocument(document);
-    
+    // コピーブックは既にロード済みと想定
     for (const line of lines) {
         const contentLine = stripSequenceArea(line);
         const normalizedLine = contentLine.trim().toUpperCase();
@@ -592,9 +590,7 @@ function searchInCopybooks(document: TextDocument, word: string): Definition | n
     const lines = text.split('\n');
     const sourceFileDir = path.dirname(URI.parse(document.uri).fsPath);
     
-    // コピーブックをロードしてインデックスする
-    loadCopybooksFromDocument(document);
-    
+    // コピーブックは既にロード済みと想定
     for (const line of lines) {
         const contentLine = stripSequenceArea(line);
         const normalizedLine = contentLine.trim().toUpperCase();
@@ -831,40 +827,44 @@ function checkTypeCompatibility(sourceInfo: PictureInfo, targetInfo: PictureInfo
  * @param document 診断対象ドキュメント
  */
 function validateDocument(document: TextDocument): void {
-    const text = document.getText();
-    const lines = text.split('\n');
-    const diagnostics: Diagnostic[] = [];
-    
-    // COPYBOOK（.cpy）ファイルは診断をスキップ
-    const isCopybook = /\.cpy$/i.test(document.uri);
-    if (isCopybook) {
-        connection.sendDiagnostics({ uri: document.uri, diagnostics: [] });
-        return;
-    }
-    
-    // 現在のドキュメントと参照されているコピーブック内の定義済み変数を取得
-    const allDefinedSymbols = new Set<string>();
-    const definedSymbols = symbolIndex.getAllSymbols(document.uri);
-    definedSymbols.forEach(s => allDefinedSymbols.add(s.name.toUpperCase()));
-    
-    // コピーブック内の定義も含める
-    for (const line of lines) {
-        const contentLine = stripSequenceArea(line);
-        const normalizedLine = contentLine.trim().toUpperCase();
+    try {
+        const text = document.getText();
+        const lines = text.split('\n');
+        const diagnostics: Diagnostic[] = [];
         
-        if (normalizedLine.startsWith('COPY')) {
-            const copybookName = copybookResolver.extractCopybookName(contentLine);
-            if (copybookName) {
-                const sourceFileDir = path.dirname(URI.parse(document.uri).fsPath);
-                const copybookPath = copybookResolver.resolveCopybook(copybookName, sourceFileDir);
-                if (copybookPath) {
-                    const copybookUri = URI.file(copybookPath).toString();
-                    const copybookSymbols = symbolIndex.getAllSymbols(copybookUri);
-                    copybookSymbols.forEach(s => allDefinedSymbols.add(s.name.toUpperCase()));
+        // COPYBOOK（.cpy）ファイルは診断をスキップ
+        const isCopybook = /\.cpy$/i.test(document.uri);
+        if (isCopybook) {
+            connection.sendDiagnostics({ uri: document.uri, diagnostics: [] });
+            return;
+        }
+        
+        // コピーブックを事前にロードしてインデックス化
+        loadCopybooksFromDocument(document);
+        
+        // 現在のドキュメントと参照されているコピーブック内の定義済み変数を取得
+        const allDefinedSymbols = new Set<string>();
+        const definedSymbols = symbolIndex.getAllSymbols(document.uri);
+        definedSymbols.forEach(s => allDefinedSymbols.add(s.name.toUpperCase()));
+        
+        // コピーブック内の定義も含める
+        for (const line of lines) {
+            const contentLine = stripSequenceArea(line);
+            const normalizedLine = contentLine.trim().toUpperCase();
+            
+            if (normalizedLine.startsWith('COPY')) {
+                const copybookName = copybookResolver.extractCopybookName(contentLine);
+                if (copybookName) {
+                    const sourceFileDir = path.dirname(URI.parse(document.uri).fsPath);
+                    const copybookPath = copybookResolver.resolveCopybook(copybookName, sourceFileDir);
+                    if (copybookPath) {
+                        const copybookUri = URI.file(copybookPath).toString();
+                        const copybookSymbols = symbolIndex.getAllSymbols(copybookUri);
+                        copybookSymbols.forEach(s => allDefinedSymbols.add(s.name.toUpperCase()));
+                    }
                 }
             }
         }
-    }
     
     // 使用された変数を追跡
     const usedVariables = new Set<string>();
@@ -1037,6 +1037,11 @@ function validateDocument(document: TextDocument): void {
     }
     
     connection.sendDiagnostics({ uri: document.uri, diagnostics });
+    } catch (err) {
+        // エラーが発生した場合はログに記録し、空の診断を送信
+        connection.console.error(`[validateDocument] Error: ${err}`);
+        connection.sendDiagnostics({ uri: document.uri, diagnostics: [] });
+    }
 }
 
 /**
