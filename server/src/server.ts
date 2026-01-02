@@ -241,6 +241,7 @@ connection.onDocumentSymbol((params: DocumentSymbolParams): DocumentSymbol[] => 
 connection.onCompletion((params: CompletionParams): CompletionItem[] => {
     const document = documents.get(params.textDocument.uri);
     if (!document) {
+        connection.console.log('[Completion] Document not found');
         return [];
     }
     
@@ -254,6 +255,8 @@ connection.onCompletion((params: CompletionParams): CompletionItem[] => {
     
     const contentLine = stripSequenceArea(line);
     const trimmedLine = contentLine.trim().toUpperCase();
+    
+    connection.console.log(`[Completion] Line: "${line}", Content: "${contentLine}", Trimmed: "${trimmedLine}", Position: ${params.position.line}:${params.position.character}`);
     
     // 1. COPY文の場合、COPYBOOKの補完候補を提供（最優先）
     if (trimmedLine.startsWith('COPY')) {
@@ -291,6 +294,7 @@ connection.onCompletion((params: CompletionParams): CompletionItem[] => {
     const keywordCompletions = getCobolKeywords();
     completions.push(...keywordCompletions);
     
+    connection.console.log(`[Completion] Returning ${completions.length} completions (${variableCompletions.length} variables, ${keywordCompletions.length} keywords)`);
     return completions;
 });
 
