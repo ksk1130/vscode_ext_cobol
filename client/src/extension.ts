@@ -1,5 +1,5 @@
 import * as path from 'path';
-import { workspace, ExtensionContext, window, ConfigurationTarget } from 'vscode';
+import { workspace, ExtensionContext, window, ConfigurationTarget, ConfigurationChangeEvent } from 'vscode';
 import {
     LanguageClient,
     LanguageClientOptions,
@@ -47,7 +47,7 @@ export function activate(context: ExtensionContext) {
     updateRulersConfiguration();
     
     // 設定変更を監視
-    const configChangeDisposable = workspace.onDidChangeConfiguration((e: any) => {
+    const configChangeDisposable = workspace.onDidChangeConfiguration((e: ConfigurationChangeEvent) => {
         if (e.affectsConfiguration('cobol.enableRulers')) {
             updateRulersConfiguration();
         }
