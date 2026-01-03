@@ -1,5 +1,5 @@
 import * as path from 'path';
-import { workspace, ExtensionContext, window } from 'vscode';
+import { workspace, ExtensionContext, window, ConfigurationTarget, ConfigurationChangeEvent } from 'vscode';
 import {
     LanguageClient,
     LanguageClientOptions,
@@ -8,6 +8,25 @@ import {
 } from 'vscode-languageclient/node';
 
 let client: LanguageClient;
+
+/**
+ * COBOLファイル用のルーラー設定を更新
+ */
+function updateRulersConfiguration() {
+    const config = workspace.getConfiguration('cobol');
+    const enableRulers = config.get<boolean>('enableRulers', true);
+    
+    // [cobol]スコープの設定を取得
+    const editorConfig = workspace.getConfiguration('', { languageId: 'cobol' });
+    
+    if (enableRulers) {
+        // ルーラーを有効にする
+        editorConfig.update('editor.rulers', [7, 8, 12], ConfigurationTarget.Global, true);
+    } else {
+        // ルーラーを無効にする（空配列に設定）
+        editorConfig.update('editor.rulers', [], ConfigurationTarget.Global, true);
+    }
+}
 
 /**
  * 拡張機能の有効化
@@ -23,6 +42,17 @@ export function activate(context: ExtensionContext) {
     );
     
     outputChannel.appendLine(`Server module path: ${serverModule}`);
+
+    // 初期ルーラー設定を適用
+    updateRulersConfiguration();
+    
+    // 設定変更を監視
+    const configChangeDisposable = workspace.onDidChangeConfiguration((e: ConfigurationChangeEvent) => {
+        if (e.affectsConfiguration('cobol.enableRulers')) {
+            updateRulersConfiguration();
+        }
+    });
+    context.subscriptions.push(configChangeDisposable);
 
     // デバッグオプション
     const debugOptions = { execArgv: ['--nolazy', '--inspect=6009'] };
