@@ -153,16 +153,20 @@ export class SymbolIndex {
                 // COBOL形式: column 1-7は無視、column 8以降のコード領域をパース
                 const varMatch = contentArea.match(/^\s*(\d{2})\s+([A-Z0-9\-]+)(\s+PIC\s+([^\s. ]+))?/i);
                 if (varMatch) {
-                    // column位置を計算（全体の行の中での位置）
-                    const columnInContent = contentArea.indexOf(varMatch[2]);
-                    symbols.push({
-                        name: varMatch[2],
-                        type: 'variable',
-                        level: parseInt(varMatch[1]),
-                        line: i,
-                        column: 8 + columnInContent,  // column 8以降からのオフセット
-                        picture: varMatch[4]
-                    });
+                    const levelNum = parseInt(varMatch[1]);
+                    // 88レベルは条件名として別途処理されるため、ここではスキップ
+                    if (levelNum !== 88) {
+                        // column位置を計算（全体の行の中での位置）
+                        const columnInContent = contentArea.indexOf(varMatch[2]);
+                        symbols.push({
+                            name: varMatch[2],
+                            type: 'variable',
+                            level: levelNum,
+                            line: i,
+                            column: 8 + columnInContent,  // column 8以降からのオフセット
+                            picture: varMatch[4]
+                        });
+                    }
                 }
                 
                 // 88 レベルの条件名も抽出（VALUE 句の有無は無視）
