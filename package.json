@@ -12,6 +12,11 @@
     "onLanguage:cobol"
   ],
   "contributes": {
+    "configurationDefaults": {
+      "[cobol]": {
+        "editor.rulers": [7, 8, 12]
+      }
+    },
     "languages": [
       {
         "id":  "cobol",
