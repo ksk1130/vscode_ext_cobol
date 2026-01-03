@@ -12,11 +12,6 @@
     "onLanguage:cobol"
   ],
   "contributes": {
-    "configurationDefaults": {
-      "[cobol]": {
-        "editor.rulers": [7, 8, 12]
-      }
-    },
     "languages": [
       {
         "id":  "cobol",
@@ -61,6 +56,11 @@
           "enum": ["off", "messages", "verbose"],
           "default": "verbose",
           "description": "LSPサーバーのトレースレベル"
+        },
+        "cobol.enableRulers": {
+          "type": "boolean",
+          "default": true,
+          "description": "COBOLファイルで7, 8, 12列目に縦線(ルーラー)を表示する"
         }
       }
     }
