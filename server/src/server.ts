@@ -542,9 +542,7 @@ function searchInCopybooksWithPath(document: TextDocument, word: string): { symb
     const lines = text.split('\n');
     const sourceFileDir = path.dirname(URI.parse(document.uri).fsPath);
     
-    // コピーブックをロードしてインデックスする
-    loadCopybooksFromDocument(document);
-    
+    // コピーブックは既にロード済みと想定
     for (const line of lines) {
         const contentLine = stripSequenceArea(line);
         const normalizedLine = contentLine.trim().toUpperCase();
@@ -592,9 +590,7 @@ function searchInCopybooks(document: TextDocument, word: string): Definition | n
     const lines = text.split('\n');
     const sourceFileDir = path.dirname(URI.parse(document.uri).fsPath);
     
-    // コピーブックをロードしてインデックスする
-    loadCopybooksFromDocument(document);
-    
+    // コピーブックは既にロード済みと想定
     for (const line of lines) {
         const contentLine = stripSequenceArea(line);
         const normalizedLine = contentLine.trim().toUpperCase();
@@ -677,14 +673,160 @@ function stripSequenceArea(line: string): string {
 }
 
 /**
+ * PIC句の情報を表すインターフェース
+ */
+interface PictureInfo {
+    type: 'numeric' | 'alphabetic' | 'alphanumeric' | 'unknown';
+    size: number;
+    hasDecimal: boolean;
+    decimalPlaces: number;
+}
+
+/**
+ * PIC句を解析して型とサイズ情報を抽出する。
+ * @param picture PIC句文字列 (例: "9(8)", "X(50)", "9(5)V99")
+ * @returns PictureInfo オブジェクト
+ */
+function parsePicture(picture: string | undefined): PictureInfo | null {
+    if (!picture) return null;
+    
+    const pic = picture.toUpperCase().trim();
+    
+    // 数値型: 9, S9, V (decimal point)
+    // 例: 9(8), S9(5), 9(5)V99, S9(3)V9(2), S999, 999
+    if (pic.includes('9')) {
+        let size = 0;
+        let decimalPlaces = 0;
+        let hasDecimal = false;
+        
+        // V (decimal point) の前後を分けて処理
+        const parts = pic.split('V');
+        
+        // 整数部分 (S符号も考慮、連続する9も処理)
+        const integerPart = parts[0];
+        // S符号を除去して9の数をカウント
+        const integerDigits = integerPart.replace(/S/g, '');
+        const intMatch = integerDigits.match(/9(\((\d+)\))?/g);
+        if (intMatch) {
+            for (const match of intMatch) {
+                const parenMatch = match.match(/\((\d+)\)/);
+                if (parenMatch) {
+                    size += parseInt(parenMatch[1]);
+                } else {
+                    size += 1;
+                }
+            }
+        }
+        
+        // 小数部分 (連続する9も処理)
+        if (parts.length > 1) {
+            hasDecimal = true;
+            const decimalPart = parts[1];
+            const decMatch = decimalPart.match(/9(\((\d+)\))?/g);
+            if (decMatch) {
+                for (const match of decMatch) {
+                    const parenMatch = match.match(/\((\d+)\)/);
+                    const places = parenMatch ? parseInt(parenMatch[1]) : 1;
+                    decimalPlaces += places;
+                    size += places;
+                }
+            }
+        }
+        
+        return {
+            type: 'numeric',
+            size: size,
+            hasDecimal: hasDecimal,
+            decimalPlaces: decimalPlaces
+        };
+    }
+    
+    // 英字型: A
+    // 例: A(20)
+    if (pic.includes('A')) {
+        let size = 0;
+        const matches = pic.match(/A(\((\d+)\))?/g);
+        if (matches) {
+            for (const match of matches) {
+                const count = match.match(/\((\d+)\)/);
+                size += count ? parseInt(count[1]) : 1;
+            }
+        }
+        return {
+            type: 'alphabetic',
+            size: size,
+            hasDecimal: false,
+            decimalPlaces: 0
+        };
+    }
+    
+    // 英数字型: X
+    // 例: X(50), X(10)
+    if (pic.includes('X')) {
+        let size = 0;
+        const matches = pic.match(/X(\((\d+)\))?/g);
+        if (matches) {
+            for (const match of matches) {
+                const count = match.match(/\((\d+)\)/);
+                size += count ? parseInt(count[1]) : 1;
+            }
+        }
+        return {
+            type: 'alphanumeric',
+            size: size,
+            hasDecimal: false,
+            decimalPlaces: 0
+        };
+    }
+    
+    return {
+        type: 'unknown',
+        size: 0,
+        hasDecimal: false,
+        decimalPlaces: 0
+    };
+}
+
+/**
+ * 2つの変数の型とサイズの互換性をチェックする。
+ * @param sourceInfo 代入元のPictureInfo
+ * @param targetInfo 代入先のPictureInfo
+ * @returns 警告メッセージ。互換性がある場合はnull。
+ */
+function checkTypeCompatibility(sourceInfo: PictureInfo, targetInfo: PictureInfo, sourceName: string, targetName: string): string | null {
+    // 型が異なる場合
+    if (sourceInfo.type !== targetInfo.type) {
+        // 数値型と英数字型の混在
+        if ((sourceInfo.type === 'numeric' && targetInfo.type === 'alphanumeric') ||
+            (sourceInfo.type === 'alphanumeric' && targetInfo.type === 'numeric')) {
+            return `型の不一致: '${sourceName}' (${sourceInfo.type}) から '${targetName}' (${targetInfo.type}) への代入`;
+        }
+        // 英字型と他の型の混在
+        if (sourceInfo.type === 'alphabetic' || targetInfo.type === 'alphabetic') {
+            return `型の不一致: '${sourceName}' (${sourceInfo.type}) から '${targetName}' (${targetInfo.type}) への代入`;
+        }
+    }
+    
+    // 数値型の場合、小数点の精度を優先してチェック
+    if (sourceInfo.type === 'numeric' && targetInfo.type === 'numeric') {
+        if (sourceInfo.decimalPlaces > targetInfo.decimalPlaces) {
+            return `小数点以下の精度不一致: '${sourceName}' (小数点以下 ${sourceInfo.decimalPlaces} 桁) から '${targetName}' (小数点以下 ${targetInfo.decimalPlaces} 桁) への代入により、精度が失われる可能性があります`;
+        }
+    }
+    
+    // サイズが異なる場合（精度が落ちる可能性がある）
+    if (sourceInfo.size > targetInfo.size) {
+        return `サイズ不一致: '${sourceName}' (サイズ ${sourceInfo.size}) から '${targetName}' (サイズ ${targetInfo.size}) への代入により、データが切り捨てられる可能性があります`;
+    }
+    
+    return null;
+}
+
+/**
  * ドキュメントを診断し、未定義変数や未使用変数の警告を生成する。
  * @param document 診断対象ドキュメント
  */
 function validateDocument(document: TextDocument): void {
-    const text = document.getText();
-    const lines = text.split('\n');
-    const diagnostics: Diagnostic[] = [];
-    
     // COPYBOOK（.cpy）ファイルは診断をスキップ
     const isCopybook = /\.cpy$/i.test(document.uri);
     if (isCopybook) {
@@ -692,29 +834,37 @@ function validateDocument(document: TextDocument): void {
         return;
     }
     
-    // 現在のドキュメントと参照されているコピーブック内の定義済み変数を取得
-    const allDefinedSymbols = new Set<string>();
-    const definedSymbols = symbolIndex.getAllSymbols(document.uri);
-    definedSymbols.forEach(s => allDefinedSymbols.add(s.name.toUpperCase()));
-    
-    // コピーブック内の定義も含める
-    for (const line of lines) {
-        const contentLine = stripSequenceArea(line);
-        const normalizedLine = contentLine.trim().toUpperCase();
+    try {
+        const text = document.getText();
+        const lines = text.split('\n');
+        const diagnostics: Diagnostic[] = [];
         
-        if (normalizedLine.startsWith('COPY')) {
-            const copybookName = copybookResolver.extractCopybookName(contentLine);
-            if (copybookName) {
-                const sourceFileDir = path.dirname(URI.parse(document.uri).fsPath);
-                const copybookPath = copybookResolver.resolveCopybook(copybookName, sourceFileDir);
-                if (copybookPath) {
-                    const copybookUri = URI.file(copybookPath).toString();
-                    const copybookSymbols = symbolIndex.getAllSymbols(copybookUri);
-                    copybookSymbols.forEach(s => allDefinedSymbols.add(s.name.toUpperCase()));
+        // コピーブックを事前にロードしてインデックス化
+        loadCopybooksFromDocument(document);
+        
+        // 現在のドキュメントと参照されているコピーブック内の定義済み変数を取得
+        const allDefinedSymbols = new Set<string>();
+        const definedSymbols = symbolIndex.getAllSymbols(document.uri);
+        definedSymbols.forEach(s => allDefinedSymbols.add(s.name.toUpperCase()));
+        
+        // コピーブック内の定義も含める
+        for (const line of lines) {
+            const contentLine = stripSequenceArea(line);
+            const normalizedLine = contentLine.trim().toUpperCase();
+            
+            if (normalizedLine.startsWith('COPY')) {
+                const copybookName = copybookResolver.extractCopybookName(contentLine);
+                if (copybookName) {
+                    const sourceFileDir = path.dirname(URI.parse(document.uri).fsPath);
+                    const copybookPath = copybookResolver.resolveCopybook(copybookName, sourceFileDir);
+                    if (copybookPath) {
+                        const copybookUri = URI.file(copybookPath).toString();
+                        const copybookSymbols = symbolIndex.getAllSymbols(copybookUri);
+                        copybookSymbols.forEach(s => allDefinedSymbols.add(s.name.toUpperCase()));
+                    }
                 }
             }
         }
-    }
     
     // 使用された変数を追跡
     const usedVariables = new Set<string>();
@@ -737,6 +887,71 @@ function validateDocument(document: TextDocument): void {
         
         // コメント行はスキップ
         if (normalizedLine.startsWith('*')) continue;
+        
+        // MOVE文の型・サイズチェック
+        if (normalizedLine.includes('MOVE') && normalizedLine.includes('TO')) {
+            // 修飾名（RECORD.FIELD）と単純名の両方をサポートし、末尾のピリオドは除外
+            const moveMatch = contentLine.match(/MOVE\s+([A-Z0-9\-]+(?:\.[A-Z0-9\-]+)*)\s+TO\s+([A-Z0-9\-]+(?:\.[A-Z0-9\-]+)*)/i);
+            if (moveMatch) {
+                const sourceName = moveMatch[1];
+                const targetName = moveMatch[2];
+                
+                // 定数（リテラル）や特殊定数は除外
+                const specialConstants = ['SPACES', 'SPACE', 'ZEROS', 'ZERO', 'ZEROES', 'HIGH-VALUE', 'HIGH-VALUES', 'LOW-VALUE', 'LOW-VALUES', 'QUOTE', 'QUOTES', 'NULL', 'NULLS'];
+                // 数値リテラル（整数または小数）または引用符で囲まれた文字列リテラルを検出
+                const isLiteral = /^\d+(\.\d+)?$/.test(sourceName) || /^["'].*["']$/.test(sourceName);
+                const isSpecialConstant = specialConstants.includes(sourceName.toUpperCase());
+                
+                if (!isLiteral && !isSpecialConstant) {
+                    // 修飾名の場合は最後の部分のみを使用（簡略化のため）
+                    const sourceBaseName = sourceName.includes('.') ? sourceName.split('.').pop()! : sourceName;
+                    const targetBaseName = targetName.includes('.') ? targetName.split('.').pop()! : targetName;
+                    
+                    // 代入元と代入先の変数情報を取得
+                    let sourceSymbol = symbolIndex.findSymbol(document.uri, sourceBaseName);
+                    if (!sourceSymbol) {
+                        // コピーブック内を検索
+                        const copybookResult = searchInCopybooksWithPath(document, sourceBaseName);
+                        if (copybookResult) {
+                            sourceSymbol = copybookResult.symbol;
+                        }
+                    }
+                    
+                    let targetSymbol = symbolIndex.findSymbol(document.uri, targetBaseName);
+                    if (!targetSymbol) {
+                        // コピーブック内を検索
+                        const copybookResult = searchInCopybooksWithPath(document, targetBaseName);
+                        if (copybookResult) {
+                            targetSymbol = copybookResult.symbol;
+                        }
+                    }
+                    
+                    // 両方の変数が定義されている場合のみチェック
+                    if (sourceSymbol && targetSymbol && sourceSymbol.picture && targetSymbol.picture) {
+                        const sourceInfo = parsePicture(sourceSymbol.picture);
+                        const targetInfo = parsePicture(targetSymbol.picture);
+                        
+                        if (sourceInfo && targetInfo) {
+                            const warningMessage = checkTypeCompatibility(sourceInfo, targetInfo, sourceBaseName, targetBaseName);
+                            if (warningMessage) {
+                                const targetIndex = contentLine.toUpperCase().indexOf(targetName.toUpperCase());
+                                // シーケンス領域を考慮した文字位置を計算
+                                const sequenceAreaLength = Math.min(7, line.length);
+                                diagnostics.push({
+                                    severity: DiagnosticSeverity.Warning,
+                                    range: {
+                                        start: { line: i, character: sequenceAreaLength + targetIndex },
+                                        end: { line: i, character: sequenceAreaLength + targetIndex + targetName.length }
+                                    },
+                                    message: warningMessage,
+                                    source: 'cobol-lsp'
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
         
         // MOVE, ADD, COMPUTE, IF, EVALUATE などで使用される変数を抽出
         const words = contentLine.match(/\b[A-Z][A-Z0-9\-]+\b/gi);
@@ -827,6 +1042,12 @@ function validateDocument(document: TextDocument): void {
     }
     
     connection.sendDiagnostics({ uri: document.uri, diagnostics });
+    } catch (err) {
+        // エラーが発生した場合はログに記録し、空の診断を送信
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        connection.console.error(`[validateDocument] Error: ${errorMessage}`);
+        connection.sendDiagnostics({ uri: document.uri, diagnostics: [] });
+    }
 }
 
 /**
