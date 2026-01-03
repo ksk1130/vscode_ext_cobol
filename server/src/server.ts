@@ -17,12 +17,21 @@ import {
     DiagnosticSeverity,
     DocumentSymbol,
     DocumentSymbolParams,
-    SymbolKind
+    SymbolKind,
+    CompletionItem,
+    CompletionItemKind,
+    CompletionParams,
+    InsertTextFormat,
+    SignatureHelp,
+    SignatureHelpParams,
+    SignatureInformation,
+    ParameterInformation
 } from 'vscode-languageserver/node';
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { URI } from 'vscode-uri';
 import * as path from 'path';
+import * as fs from 'fs';
 
 import { CopybookResolver } from './resolver/copybookResolver';
 import { ProgramResolver } from './resolver/programResolver';
@@ -68,7 +77,14 @@ connection.onInitialize((params:  InitializeParams) => {
             definitionProvider: true,
             referencesProvider: true,
             hoverProvider: true,
-            documentSymbolProvider: true
+            documentSymbolProvider: true,
+            completionProvider: {
+                resolveProvider: false,
+                triggerCharacters: [' ', '-', '.']
+            },
+            signatureHelpProvider: {
+                triggerCharacters: ['(', ',', ' ']
+            }
         }
     };
 });
@@ -215,6 +231,118 @@ connection.onDocumentSymbol((params: DocumentSymbolParams): DocumentSymbol[] => 
     
     // DocumentSymbol形式に変換
     return convertToDocumentSymbols(allSymbols, document);
+});
+
+/**
+ * 自動補完候補の提供を行う。
+ * @param params 補完要求パラメータ
+ * @returns 補完候補の配列
+ */
+connection.onCompletion((params: CompletionParams): CompletionItem[] => {
+    const document = documents.get(params.textDocument.uri);
+    if (!document) {
+        connection.console.log('[Completion] Document not found');
+        return [];
+    }
+    
+    const completions: CompletionItem[] = [];
+    
+    // 現在行のテキストを取得
+    const line = document.getText({
+        start: { line: params.position.line, character: 0 },
+        end: { line: params.position.line, character: params.position.character }
+    });
+    
+    const contentLine = stripSequenceArea(line);
+    const trimmedLine = contentLine.trim().toUpperCase();
+    
+    connection.console.log(`[Completion] Line: "${line}", Content: "${contentLine}", Trimmed: "${trimmedLine}", Position: ${params.position.line}:${params.position.character}`);
+    
+    // 1. COPY文の場合、COPYBOOKの補完候補を提供（最優先）
+    if (trimmedLine.startsWith('COPY')) {
+        const copybookCompletions = getCopybookCompletions(document);
+        completions.push(...copybookCompletions);
+        return completions;
+    }
+    
+    // 2. PERFORM文の場合、パラグラフ/セクションの補完候補を提供
+    if (trimmedLine.startsWith('PERFORM')) {
+        const paragraphCompletions = getParagraphCompletions(document);
+        completions.push(...paragraphCompletions);
+        // キーワードも追加（PERFORM UNTIL など）
+        const keywordCompletions = getCobolKeywords();
+        completions.push(...keywordCompletions);
+        return completions;
+    }
+    
+    // 3. CALL文の場合、プログラム名の補完候補を提供
+    if (trimmedLine.includes('CALL')) {
+        const programCompletions = getProgramCompletions();
+        completions.push(...programCompletions);
+        // CALL 文でも変数やキーワードが必要な場合がある（USING句など）
+        const variableCompletions = getVariableCompletions(document);
+        completions.push(...variableCompletions);
+        const keywordCompletions = getCobolKeywords();
+        completions.push(...keywordCompletions);
+        return completions;
+    }
+    
+    // 4. 通常のコンテキストでは、変数とキーワードの補完候補を提供
+    const variableCompletions = getVariableCompletions(document);
+    completions.push(...variableCompletions);
+    
+    const keywordCompletions = getCobolKeywords();
+    completions.push(...keywordCompletions);
+    
+    connection.console.log(`[Completion] Returning ${completions.length} completions (${variableCompletions.length} variables, ${keywordCompletions.length} keywords)`);
+    return completions;
+});
+
+/**
+ * シグネチャヘルプの提供を行う（CALL文のパラメータヒント）。
+ * @param params シグネチャヘルプ要求パラメータ
+ * @returns シグネチャヘルプ情報
+ */
+connection.onSignatureHelp((params: SignatureHelpParams): SignatureHelp | null => {
+    const document = documents.get(params.textDocument.uri);
+    if (!document) {
+        return null;
+    }
+    
+    const line = document.getText({
+        start: { line: params.position.line, character: 0 },
+        end: { line: params.position.line, character: params.position.character }
+    });
+    
+    const contentLine = stripSequenceArea(line);
+    const upperLine = contentLine.toUpperCase();
+    
+    // CALL文のシグネチャヘルプを提供
+    if (upperLine.includes('CALL')) {
+        const callMatch = contentLine.match(/CALL\s+['"]([^'"]+)['"]/i);
+        if (callMatch) {
+            const programName = callMatch[1];
+            
+            const signatures: SignatureInformation[] = [
+                {
+                    label: `CALL "${programName}" USING parameter1 parameter2 ...`,
+                    documentation: `Call the program ${programName} with parameters`,
+                    parameters: [
+                        ParameterInformation.create('parameter1', 'First parameter'),
+                        ParameterInformation.create('parameter2', 'Second parameter')
+                    ]
+                }
+            ];
+            
+            return {
+                signatures,
+                activeSignature: 0,
+                activeParameter: 0
+            };
+        }
+    }
+    
+    return null;
 });
 
 /**
@@ -658,6 +786,241 @@ function getWordAtPosition(document: TextDocument, position: Position): string |
     }
     
     return null;
+}
+
+/**
+ * COBOL キーワードの補完候補を生成する。
+ * @returns COBOL キーワードの CompletionItem 配列
+ */
+function getCobolKeywords(): CompletionItem[] {
+    const keywords = [
+        // Division keywords
+        'IDENTIFICATION', 'DIVISION', 'PROGRAM-ID', 'ENVIRONMENT', 'CONFIGURATION', 'SECTION',
+        'INPUT-OUTPUT', 'FILE-CONTROL', 'DATA', 'WORKING-STORAGE', 'LOCAL-STORAGE', 
+        'LINKAGE', 'FILE', 'PROCEDURE',
+        
+        // Data definition keywords
+        'PIC', 'PICTURE', 'VALUE', 'OCCURS', 'REDEFINES', 'RENAMES', 'USAGE', 'COMP', 'COMP-3',
+        'BINARY', 'DISPLAY', 'PACKED-DECIMAL', 'JUSTIFIED', 'BLANK', 'SYNCHRONIZED', 'SIGN',
+        
+        // Procedure keywords
+        'MOVE', 'TO', 'ADD', 'SUBTRACT', 'MULTIPLY', 'DIVIDE', 'COMPUTE', 'GIVING', 'REMAINDER',
+        'PERFORM', 'UNTIL', 'VARYING', 'FROM', 'BY', 'AFTER', 'TIMES', 'THRU', 'THROUGH',
+        'IF', 'THEN', 'ELSE', 'END-IF', 'EVALUATE', 'WHEN', 'OTHER', 'END-EVALUATE',
+        'CALL', 'USING', 'RETURNING', 'END-CALL',
+        'GO', 'GOTO', 'DEPENDING', 'ON',
+        'CONTINUE', 'EXIT', 'STOP', 'RUN', 'GOBACK',
+        'ACCEPT', 'DISPLAY', 'UPON',
+        
+        // File operations
+        'OPEN', 'INPUT', 'OUTPUT', 'EXTEND', 'I-O', 'CLOSE', 'READ', 'WRITE', 'REWRITE', 
+        'DELETE', 'START', 'INTO', 'AT', 'END', 'NOT', 'INVALID', 'KEY',
+        
+        // String operations
+        'STRING', 'DELIMITED', 'SIZE', 'POINTER', 'END-STRING',
+        'UNSTRING', 'DELIMITER', 'ALL', 'LEADING', 'TALLYING', 'END-UNSTRING',
+        'INSPECT', 'REPLACING', 'CONVERTING', 'CHARACTERS',
+        
+        // Control structures
+        'SEARCH', 'VARYING', 'END-SEARCH', 'SET', 'UP', 'DOWN', 'INDEX',
+        'SORT', 'ASCENDING', 'DESCENDING', 'MERGE',
+        
+        // Logical operators
+        'AND', 'OR', 'NOT', 'EQUAL', 'GREATER', 'LESS', 'THAN',
+        
+        // Special registers and constants
+        'SPACE', 'SPACES', 'ZERO', 'ZEROS', 'ZEROES', 'HIGH-VALUE', 'HIGH-VALUES',
+        'LOW-VALUE', 'LOW-VALUES', 'QUOTE', 'QUOTES', 'NULL', 'NULLS',
+        
+        // Conditions
+        'TRUE', 'FALSE', 'POSITIVE', 'NEGATIVE', 'NUMERIC', 'ALPHABETIC',
+        
+        // Copy
+        'COPY', 'REPLACING', 'SUPPRESS'
+    ];
+    
+    return keywords.map(keyword => ({
+        label: keyword,
+        kind: CompletionItemKind.Keyword,
+        detail: 'COBOL Keyword',
+        insertText: keyword
+    }));
+}
+
+/**
+ * 変数の補完候補を生成する。
+ * @param document 現在のドキュメント
+ * @returns 変数の CompletionItem 配列
+ */
+function getVariableCompletions(document: TextDocument): CompletionItem[] {
+    const completions: CompletionItem[] = [];
+    
+    // 現在のドキュメントからシンボルを取得
+    symbolIndex.indexDocument(document);
+    loadCopybooksFromDocument(document);
+    
+    const symbols = symbolIndex.getAllSymbols(document.uri);
+    
+    // 変数の補完候補を追加
+    for (const symbol of symbols) {
+        if (symbol.type === 'variable') {
+            let detail = '';
+            if (symbol.level !== undefined) {
+                detail = `Level ${symbol.level}`;
+            }
+            if (symbol.picture) {
+                detail += detail ? ` PIC ${symbol.picture}` : `PIC ${symbol.picture}`;
+            }
+            
+            completions.push({
+                label: symbol.name,
+                kind: CompletionItemKind.Variable,
+                detail: detail || 'Variable',
+                insertText: symbol.name
+            });
+        }
+    }
+    
+    // COPY で参照されているコピーブック内の変数も追加
+    const text = document.getText();
+    const lines = text.split('\n');
+    const sourceFileDir = path.dirname(URI.parse(document.uri).fsPath);
+    
+    for (const line of lines) {
+        const contentLine = stripSequenceArea(line);
+        const normalizedLine = contentLine.trim().toUpperCase();
+        
+        if (normalizedLine.startsWith('COPY')) {
+            const copybookInfo = copybookResolver.extractCopybookInfo(contentLine);
+            if (!copybookInfo.name) continue;
+            
+            const copybookPath = copybookResolver.resolveCopybook(copybookInfo.name, sourceFileDir);
+            if (!copybookPath) continue;
+            
+            const copybookUri = URI.file(copybookPath).toString();
+            const copybookSymbols = symbolIndex.getAllSymbols(copybookUri);
+            
+            for (const symbol of copybookSymbols) {
+                if (symbol.type === 'variable') {
+                    let detail = 'From COPYBOOK';
+                    if (symbol.level !== undefined) {
+                        detail = `Level ${symbol.level} (COPYBOOK)`;
+                    }
+                    if (symbol.picture) {
+                        detail += ` PIC ${symbol.picture}`;
+                    }
+                    
+                    completions.push({
+                        label: symbol.name,
+                        kind: CompletionItemKind.Variable,
+                        detail: detail,
+                        insertText: symbol.name
+                    });
+                }
+            }
+        }
+    }
+    
+    return completions;
+}
+
+/**
+ * パラグラフ/セクションの補完候補を生成する。
+ * @param document 現在のドキュメント
+ * @returns パラグラフ/セクションの CompletionItem 配列
+ */
+function getParagraphCompletions(document: TextDocument): CompletionItem[] {
+    const completions: CompletionItem[] = [];
+    
+    symbolIndex.indexDocument(document);
+    const symbols = symbolIndex.getAllSymbols(document.uri);
+    
+    for (const symbol of symbols) {
+        if (symbol.type === 'paragraph') {
+            completions.push({
+                label: symbol.name,
+                kind: CompletionItemKind.Function,
+                detail: 'Paragraph',
+                insertText: symbol.name
+            });
+        } else if (symbol.type === 'section') {
+            completions.push({
+                label: symbol.name,
+                kind: CompletionItemKind.Class,
+                detail: 'Section',
+                insertText: symbol.name
+            });
+        }
+    }
+    
+    return completions;
+}
+
+/**
+ * COPYBOOK 名の補完候補を生成する。
+ * @param document 現在のドキュメント
+ * @returns COPYBOOK 名の CompletionItem 配列
+ */
+function getCopybookCompletions(document: TextDocument): CompletionItem[] {
+    const completions: CompletionItem[] = [];
+    const sourceFileDir = path.dirname(URI.parse(document.uri).fsPath);
+    
+    try {
+        // COPYBOOK 検索パスから候補を取得
+        const searchPaths = [
+            workspaceRoot ? path.join(workspaceRoot, 'copybooks') : '',
+            workspaceRoot ? path.join(workspaceRoot, 'copy') : '',
+            workspaceRoot ? path.join(workspaceRoot, 'COPY') : '',
+            sourceFileDir
+        ].filter(p => p && fs.existsSync(p));
+        
+        const extensions = ['.cpy', '.CPY', '.cbl', '.CBL'];
+        
+        for (const searchPath of searchPaths) {
+            const files = fs.readdirSync(searchPath);
+            
+            for (const file of files) {
+                const ext = path.extname(file);
+                if (extensions.includes(ext) || ext === '') {
+                    const basename = path.basename(file, ext);
+                    
+                    completions.push({
+                        label: basename,
+                        kind: CompletionItemKind.File,
+                        detail: `COPYBOOK from ${path.basename(searchPath)}`,
+                        insertText: basename
+                    });
+                }
+            }
+        }
+    } catch (err) {
+        connection.console.log(`[getCopybookCompletions] Error reading copybook directories: ${err}`);
+    }
+    
+    return completions;
+}
+
+/**
+ * プログラム名の補完候補を生成する。
+ * @returns プログラム名の CompletionItem 配列
+ */
+function getProgramCompletions(): CompletionItem[] {
+    const completions: CompletionItem[] = [];
+    
+    // ワークスペースは初期化時にすでにインデックス化されている
+    // 登録されているプログラム名を取得
+    const programs = programResolver.getAllPrograms();
+    
+    for (const program of programs) {
+        completions.push({
+            label: program.programId,
+            kind: CompletionItemKind.Module,
+            detail: `Program from ${path.basename(program.filePath)}`,
+            insertText: `"${program.programId}"`
+        });
+    }
+    
+    return completions;
 }
 
 documents.listen(connection);
