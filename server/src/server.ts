@@ -41,9 +41,9 @@ import { configureLogger, getServerLogger } from './logger';
 const connection = createConnection(ProposedFeatures.all);
 const documents = new TextDocuments(TextDocument);
 
-// Configure logger
+// Configure logger - if it fails, continue without structured logging
 configureLogger().catch(err => {
-    connection.console.error(`Failed to configure logger: ${err}`);
+    connection.console.error(`Failed to configure LogTape logger: ${err}`);
 });
 
 const logger = getServerLogger();

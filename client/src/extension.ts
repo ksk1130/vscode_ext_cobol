@@ -36,7 +36,12 @@ function updateRulersConfiguration() {
  */
 export async function activate(context: ExtensionContext) {
     // Configure logger
-    await configureLogger();
+    try {
+        await configureLogger();
+    } catch (err) {
+        // If logger configuration fails, continue without structured logging
+        console.error('Failed to configure LogTape logger:', err);
+    }
     
     // 出力チャンネルを作成
     const outputChannel = window.createOutputChannel('COBOL LSP');
