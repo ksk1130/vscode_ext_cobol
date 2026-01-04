@@ -6,8 +6,10 @@ import {
     ServerOptions,
     TransportKind
 } from 'vscode-languageclient/node';
+import { configureLogger, getClientLogger } from './logger';
 
 let client: LanguageClient;
+const logger = getClientLogger();
 
 /**
  * COBOLファイル用のルーラー設定を更新
@@ -32,7 +34,10 @@ function updateRulersConfiguration() {
  * 拡張機能の有効化
  * @param context 拡張機能コンテキスト
  */
-export function activate(context: ExtensionContext) {
+export async function activate(context: ExtensionContext) {
+    // Configure logger
+    await configureLogger();
+    
     // 出力チャンネルを作成
     const outputChannel = window.createOutputChannel('COBOL LSP');
     
@@ -42,6 +47,7 @@ export function activate(context: ExtensionContext) {
     );
     
     outputChannel.appendLine(`Server module path: ${serverModule}`);
+    logger.debug(`Server module path: ${serverModule}`);
 
     // 初期ルーラー設定を適用
     updateRulersConfiguration();
@@ -101,7 +107,7 @@ export function activate(context: ExtensionContext) {
     window.setStatusBarMessage('cobol LSP: Active', 3000);
 
     outputChannel.appendLine('cobol LSP extension is now active');
-    console.log('cobol LSP extension is now active');
+    logger.info('cobol LSP extension is now active');
 }
 
 /**

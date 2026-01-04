@@ -1,15 +1,16 @@
 {
   "name": "cobol-lsp-server",
   "version": "0.1.0",
-  "description":  "cobol LSP Server",
+  "description": "cobol LSP Server",
   "main": "./out/server.js",
   "scripts": {
     "compile": "tsc -p .",
     "watch": "tsc -watch -p ."
   },
   "dependencies": {
+    "@logtape/logtape": "^1.3.5",
     "vscode-languageserver": "^9.0.1",
-    "vscode-languageserver-textdocument":  "^1.0.11",
+    "vscode-languageserver-textdocument": "^1.0.11",
     "vscode-uri": "^3.0.0"
   },
   "devDependencies": {

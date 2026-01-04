@@ -1,7 +1,7 @@
 {
   "name": "cobol-lsp",
   "version": "0.1.0",
-  "description":  "cobol Language Server Protocol",
+  "description": "cobol Language Server Protocol",
   "publisher": "unknown",
   "private": true,
   "main": "./client/out/extension.js",
@@ -14,15 +14,27 @@
   "contributes": {
     "languages": [
       {
-        "id":  "cobol",
-        "extensions": [".cbl", ".cob", ".cobol", ".cpy", ".CBL", ".COB", ".COBOL", ".CPY"],
-        "aliases": ["COBOL", "cobol"],
+        "id": "cobol",
+        "extensions": [
+          ".cbl",
+          ".cob",
+          ".cobol",
+          ".cpy",
+          ".CBL",
+          ".COB",
+          ".COBOL",
+          ".CPY"
+        ],
+        "aliases": [
+          "COBOL",
+          "cobol"
+        ],
         "configuration": "./client/language-configuration.json"
       }
     ],
     "grammars": [
       {
-        "language":  "cobol",
+        "language": "cobol",
         "scopeName": "source.cobol",
         "path": "./client/syntaxes/cobol.tmLanguage.json"
       }
@@ -32,28 +44,53 @@
       "title": "cobol LSP",
       "properties": {
         "cobol.copybookPaths": {
-          "type":  "array",
-          "default":  ["./copybooks", "./copy", "./COPY"],
+          "type": "array",
+          "default": [
+            "./copybooks",
+            "./copy",
+            "./COPY"
+          ],
           "description": "COPYBOOKファイルの検索パス"
         },
         "cobol.programSearchPaths": {
           "type": "array",
-          "default": ["./src", "./programs", "./SRC"],
+          "default": [
+            "./src",
+            "./programs",
+            "./SRC"
+          ],
           "description": "COBOLプログラムファイルの検索パス"
         },
         "cobol.fileExtensions": {
-          "type":  "array",
-          "default":  [".cbl", ".cob", ".cobol", ".CBL", ".COB", ".COBOL"],
+          "type": "array",
+          "default": [
+            ".cbl",
+            ".cob",
+            ".cobol",
+            ".CBL",
+            ".COB",
+            ".COBOL"
+          ],
           "description": "COBOLファイルの拡張子"
         },
         "cobol.copybookExtensions": {
           "type": "array",
-          "default": [".cpy", ".CPY", ".cbl", ".CBL", ""],
+          "default": [
+            ".cpy",
+            ".CPY",
+            ".cbl",
+            ".CBL",
+            ""
+          ],
           "description": "COPYBOOKファイルの拡張子"
         },
         "cobol.trace.server": {
           "type": "string",
-          "enum": ["off", "messages", "verbose"],
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
           "default": "verbose",
           "description": "LSPサーバーのトレースレベル"
         },
@@ -71,8 +108,8 @@
   ],
   "scripts": {
     "compile": "npm run compile:client && npm run compile:server",
-    "compile:client":  "cd client && npm run compile",
-    "compile:server":  "cd server && npm run compile",
+    "compile:client": "cd client && npm run compile",
+    "compile:server": "cd server && npm run compile",
     "watch": "npm run watch:client & npm run watch:server",
     "watch:client": "cd client && npm run watch",
     "watch:server": "cd server && npm run watch",
@@ -80,17 +117,18 @@
     "vscode:prepublish": "npm run compile"
   },
   "dependencies": {
+    "@logtape/logtape": "^1.3.5",
+    "vscode-jsonrpc": "^8.2.0",
     "vscode-languageclient": "^9.0.1",
     "vscode-languageserver": "^9.0.1",
     "vscode-languageserver-protocol": "^3.17.5",
     "vscode-languageserver-textdocument": "^1.0.11",
     "vscode-languageserver-types": "^3.17.5",
-    "vscode-jsonrpc": "^8.2.0",
     "vscode-uri": "^3.0.0"
   },
   "devDependencies": {
     "@types/node": "^18.0.0",
     "@vscode/vsce": "^2.19.0",
-    "typescript":  "^5.0.0"
+    "typescript": "^5.0.0"
   }
 }

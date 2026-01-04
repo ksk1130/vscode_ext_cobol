@@ -36,9 +36,17 @@ import * as fs from 'fs';
 import { CopybookResolver } from './resolver/copybookResolver';
 import { ProgramResolver } from './resolver/programResolver';
 import { SymbolIndex, SymbolInfo } from './index/symbolIndex';
+import { configureLogger, getServerLogger } from './logger';
 
 const connection = createConnection(ProposedFeatures.all);
 const documents = new TextDocuments(TextDocument);
+
+// Configure logger
+configureLogger().catch(err => {
+    connection.console.error(`Failed to configure logger: ${err}`);
+});
+
+const logger = getServerLogger();
 
 let copybookResolver: CopybookResolver;
 let programResolver: ProgramResolver;
@@ -99,7 +107,7 @@ connection.onInitialize((params:  InitializeParams) => {
 documents.onDidChangeContent(change => {
     symbolIndex.indexDocument(change.document);
     const allSymbols = symbolIndex.getAllSymbols(change.document.uri);
-    connection.console.log(`[onDidChangeContent] Document: ${change.document.uri.substring(change.document.uri.lastIndexOf('/'))}, Symbols: ${allSymbols.length}`);
+    logger.debug(`[onDidChangeContent] Document: ${change.document.uri.substring(change.document.uri.lastIndexOf('/'))}, Symbols: ${allSymbols.length}`);
     loadCopybooksFromDocument(change.document);
     
     // 診断を実行
@@ -116,7 +124,7 @@ documents.onDidChangeContent(change => {
 documents.onDidOpen(event => {
     symbolIndex.indexDocument(event.document);
     const allSymbols = symbolIndex.getAllSymbols(event.document.uri);
-    connection.console.log(`[onDidOpen] Document: ${event.document.uri.substring(event.document.uri.lastIndexOf('/'))}, Symbols: ${allSymbols.length}`);
+    logger.debug(`[onDidOpen] Document: ${event.document.uri.substring(event.document.uri.lastIndexOf('/'))}, Symbols: ${allSymbols.length}`);
     loadCopybooksFromDocument(event.document);
     
     // 診断を実行
@@ -172,7 +180,7 @@ connection.onDefinition((params: DefinitionParams): Definition | null => {
 connection.onHover((params: HoverParams): Hover | null => {
     const document = documents.get(params.textDocument.uri);
     if (!document) {
-        connection.console.log(`[Hover] Document not found: ${params.textDocument.uri}`);
+        logger.debug(`[Hover] Document not found: ${params.textDocument.uri}`);
         return null;
     }
     
@@ -181,16 +189,16 @@ connection.onHover((params: HoverParams): Hover | null => {
     loadCopybooksFromDocument(document);
     
     const word = getWordAtPosition(document, params.position);
-    connection.console.log(`[Hover] Word at position: "${word}"`);
+    logger.debug(`[Hover] Word at position: "${word}"`);
     
     if (!word) {
-        connection.console.log(`[Hover] No word found at position`);
+        logger.debug(`[Hover] No word found at position`);
         return null;
     }
     
     // 1. 現在のドキュメント内の記号を検索
     let symbol = symbolIndex.findSymbol(document.uri, word);
-    connection.console.log(`[Hover] Searching in document: ${document.uri}, found: ${symbol ? 'YES' : 'NO'}`);
+    logger.debug(`[Hover] Searching in document: ${document.uri}, found: ${symbol ? 'YES' : 'NO'}`);
     
     if (symbol) {
         return createHoverForSymbol(symbol, document.uri);
@@ -198,14 +206,14 @@ connection.onHover((params: HoverParams): Hover | null => {
     
     // 2. COPY で参照されているコピーブック内の記号を検索
     const copybookResult = searchInCopybooksWithPath(document, word);
-    connection.console.log(`[Hover] Searching in copybooks, found: ${copybookResult ? 'YES' : 'NO'}`);
+    logger.debug(`[Hover] Searching in copybooks, found: ${copybookResult ? 'YES' : 'NO'}`);
     
     if (copybookResult) {
         const { symbol, copybookPath } = copybookResult;
         return createHoverForSymbol(symbol, URI.file(copybookPath).toString());
     }
     
-    connection.console.log(`[Hover] Symbol not found: ${word}`);
+    logger.debug(`[Hover] Symbol not found: ${word}`);
     return null;
 });
 
@@ -217,7 +225,7 @@ connection.onHover((params: HoverParams): Hover | null => {
 connection.onDocumentSymbol((params: DocumentSymbolParams): DocumentSymbol[] => {
     const document = documents.get(params.textDocument.uri);
     if (!document) {
-        connection.console.log(`[DocumentSymbol] Document not found: ${params.textDocument.uri}`);
+        logger.debug(`[DocumentSymbol] Document not found: ${params.textDocument.uri}`);
         return [];
     }
     
@@ -227,7 +235,7 @@ connection.onDocumentSymbol((params: DocumentSymbolParams): DocumentSymbol[] => 
     
     // すべてのシンボルを取得
     const allSymbols = symbolIndex.getAllSymbols(document.uri);
-    connection.console.log(`[DocumentSymbol] Found ${allSymbols.length} symbols in document`);
+    logger.debug(`[DocumentSymbol] Found ${allSymbols.length} symbols in document`);
     
     // DocumentSymbol形式に変換
     return convertToDocumentSymbols(allSymbols, document);
@@ -241,7 +249,7 @@ connection.onDocumentSymbol((params: DocumentSymbolParams): DocumentSymbol[] => 
 connection.onCompletion((params: CompletionParams): CompletionItem[] => {
     const document = documents.get(params.textDocument.uri);
     if (!document) {
-        connection.console.log('[Completion] Document not found');
+        logger.debug('[Completion] Document not found');
         return [];
     }
     
@@ -256,7 +264,7 @@ connection.onCompletion((params: CompletionParams): CompletionItem[] => {
     const contentLine = stripSequenceArea(line);
     const trimmedLine = contentLine.trim().toUpperCase();
     
-    connection.console.log(`[Completion] Line: "${line}", Content: "${contentLine}", Trimmed: "${trimmedLine}", Position: ${params.position.line}:${params.position.character}`);
+    logger.debug(`[Completion] Line: "${line}", Content: "${contentLine}", Trimmed: "${trimmedLine}", Position: ${params.position.line}:${params.position.character}`);
     
     // 1. COPY文の場合、COPYBOOKの補完候補を提供（最優先）
     if (trimmedLine.startsWith('COPY')) {
@@ -294,7 +302,7 @@ connection.onCompletion((params: CompletionParams): CompletionItem[] => {
     const keywordCompletions = getCobolKeywords();
     completions.push(...keywordCompletions);
     
-    connection.console.log(`[Completion] Returning ${completions.length} completions (${variableCompletions.length} variables, ${keywordCompletions.length} keywords)`);
+    logger.debug(`[Completion] Returning ${completions.length} completions (${variableCompletions.length} variables, ${keywordCompletions.length} keywords)`);
     return completions;
 });
 
@@ -994,7 +1002,7 @@ function getCopybookCompletions(document: TextDocument): CompletionItem[] {
             }
         }
     } catch (err) {
-        connection.console.log(`[getCopybookCompletions] Error reading copybook directories: ${err}`);
+        logger.warn(`[getCopybookCompletions] Error reading copybook directories: ${err}`);
     }
     
     return completions;
@@ -1408,7 +1416,7 @@ function validateDocument(document: TextDocument): void {
     } catch (err) {
         // エラーが発生した場合はログに記録し、空の診断を送信
         const errorMessage = err instanceof Error ? err.message : String(err);
-        connection.console.error(`[validateDocument] Error: ${errorMessage}`);
+        logger.error(`[validateDocument] Error: ${errorMessage}`);
         connection.sendDiagnostics({ uri: document.uri, diagnostics: [] });
     }
 }
