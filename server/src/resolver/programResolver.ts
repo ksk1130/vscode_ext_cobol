@@ -1,6 +1,87 @@
 // src/resolver/programResolver.ts
 import * as fs from 'fs';
 import * as path from 'path';
+import { TextDecoder } from 'util';
+
+/**
+ * ファイルのエンコーディングを自動検出
+ * @param buffer ファイルのバッファ
+ * @returns 検出されたエンコーディング ('utf-8' | 'shift_jis')
+ */
+function detectEncoding(buffer: Buffer): 'utf-8' | 'shift_jis' {
+    // BOMチェック
+    if (buffer.length >= 3 && buffer[0] === 0xEF && buffer[1] === 0xBB && buffer[2] === 0xBF) {
+        return 'utf-8';
+    }
+    
+    const sampleSize = Math.min(buffer.length, 1024);
+    let utf8Score = 0;
+    let shiftJisScore = 0;
+    
+    for (let i = 0; i < sampleSize; i++) {
+        const byte = buffer[i];
+        
+        if (i < sampleSize - 1) {
+            const nextByte = buffer[i + 1];
+            if (((byte >= 0x81 && byte <= 0x9F) || (byte >= 0xE0 && byte <= 0xEF)) &&
+                ((nextByte >= 0x40 && nextByte <= 0x7E) || (nextByte >= 0x80 && nextByte <= 0xFC))) {
+                shiftJisScore += 2;
+                i++;
+                continue;
+            }
+        }
+        
+        if ((byte & 0xE0) === 0xC0 && i < sampleSize - 1) {
+            const nextByte = buffer[i + 1];
+            if ((nextByte & 0xC0) === 0x80) {
+                utf8Score += 2;
+                i++;
+                continue;
+            }
+        } else if ((byte & 0xF0) === 0xE0 && i < sampleSize - 2) {
+            const byte2 = buffer[i + 1];
+            const byte3 = buffer[i + 2];
+            if ((byte2 & 0xC0) === 0x80 && (byte3 & 0xC0) === 0x80) {
+                utf8Score += 3;
+                i += 2;
+                continue;
+            }
+        }
+        
+        if (byte <= 0x7F) {
+            utf8Score += 0.1;
+            shiftJisScore += 0.1;
+        }
+    }
+    
+    return shiftJisScore > utf8Score ? 'shift_jis' : 'utf-8';
+}
+
+/**
+ * エンコーディングを自動検出してファイルを読み込む
+ * @param filePath ファイルパス
+ * @param logCallback ログ出力用コールバック関数（オプション）
+ * @returns ファイル内容（文字列）
+ */
+function readFileWithEncoding(filePath: string, logCallback?: (message: string) => void): string {
+    const buffer = fs.readFileSync(filePath);
+    const encoding = detectEncoding(buffer);
+    
+    if (logCallback) {
+        logCallback(`[Encoding] Detected ${encoding} for file: ${path.basename(filePath)}`);
+    }
+    
+    try {
+        const decoder = new TextDecoder(encoding);
+        return decoder.decode(buffer);
+    } catch (err) {
+        if (logCallback) {
+            logCallback(`[Encoding] Failed to decode ${filePath} as ${encoding}, falling back to utf-8`);
+        }
+        const decoder = new TextDecoder('utf-8');
+        return decoder.decode(buffer);
+    }
+}
 
 /**
  * プログラム情報インターフェース
@@ -17,6 +98,11 @@ export interface ProgramInfo {
  */
 export class ProgramResolver {
     private programIndex: Map<string, ProgramInfo> = new Map();
+    private logCallback?: (message: string) => void;
+    
+    constructor(logCallback?: (message: string) => void) {
+        this.logCallback = logCallback;
+    }
     
     /**
      * ワークスペース内の全COBOLプログラムをインデックス化
@@ -27,7 +113,7 @@ export class ProgramResolver {
         const cobolFiles = this.findCobolFiles(workspacePath);
         
         for (const filePath of cobolFiles) {
-            const content = fs.readFileSync(filePath, 'utf-8');
+            const content = readFileWithEncoding(filePath, this.logCallback);
             const programInfo = this.extractProgramId(content, filePath);
             
             if (programInfo) {

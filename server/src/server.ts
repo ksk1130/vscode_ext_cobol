@@ -33,10 +33,96 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { URI } from 'vscode-uri';
 import * as path from 'path';
 import * as fs from 'fs';
+import { TextDecoder } from 'util';
 
 import { CopybookResolver } from './resolver/copybookResolver';
 import { ProgramResolver } from './resolver/programResolver';
 import { SymbolIndex, SymbolInfo } from './index/symbolIndex';
+
+/**
+ * ファイルのエンコーディングを自動検出
+ * @param buffer ファイルのバッファ
+ * @returns 検出されたエンコーディング ('utf-8' | 'shift_jis')
+ */
+function detectEncoding(buffer: Buffer): 'utf-8' | 'shift_jis' {
+    // BOMチェック
+    if (buffer.length >= 3 && buffer[0] === 0xEF && buffer[1] === 0xBB && buffer[2] === 0xBF) {
+        return 'utf-8'; // UTF-8 BOM
+    }
+    
+    // バイトパターンを分析（最初の1024バイトをサンプリング）
+    const sampleSize = Math.min(buffer.length, 1024);
+    let utf8Score = 0;
+    let shiftJisScore = 0;
+    
+    for (let i = 0; i < sampleSize; i++) {
+        const byte = buffer[i];
+        
+        // Shift_JISの2バイト文字パターン
+        // 1バイト目: 0x81-0x9F, 0xE0-0xEF
+        // 2バイト目: 0x40-0x7E, 0x80-0xFC
+        if (i < sampleSize - 1) {
+            const nextByte = buffer[i + 1];
+            if (((byte >= 0x81 && byte <= 0x9F) || (byte >= 0xE0 && byte <= 0xEF)) &&
+                ((nextByte >= 0x40 && nextByte <= 0x7E) || (nextByte >= 0x80 && nextByte <= 0xFC))) {
+                shiftJisScore += 2;
+                i++; // 2バイト文字なので次をスキップ
+                continue;
+            }
+        }
+        
+        // UTF-8のマルチバイト文字パターン
+        if ((byte & 0xE0) === 0xC0 && i < sampleSize - 1) {
+            // 2バイトUTF-8
+            const nextByte = buffer[i + 1];
+            if ((nextByte & 0xC0) === 0x80) {
+                utf8Score += 2;
+                i++;
+                continue;
+            }
+        } else if ((byte & 0xF0) === 0xE0 && i < sampleSize - 2) {
+            // 3バイトUTF-8（日本語の多くはここ）
+            const byte2 = buffer[i + 1];
+            const byte3 = buffer[i + 2];
+            if ((byte2 & 0xC0) === 0x80 && (byte3 & 0xC0) === 0x80) {
+                utf8Score += 3;
+                i += 2;
+                continue;
+            }
+        }
+        
+        // ASCIIの範囲（0x00-0x7F）は両方で有効
+        if (byte <= 0x7F) {
+            utf8Score += 0.1;
+            shiftJisScore += 0.1;
+        }
+    }
+    
+    // スコアが高い方を採用（デフォルトはUTF-8）
+    return shiftJisScore > utf8Score ? 'shift_jis' : 'utf-8';
+}
+
+/**
+ * エンコーディングを自動検出してファイルを読み込む
+ * @param filePath ファイルパス
+ * @returns ファイル内容（文字列）
+ */
+function readFileWithEncoding(filePath: string): string {
+    const buffer = fs.readFileSync(filePath);
+    const encoding = detectEncoding(buffer);
+    
+    connection.console.log(`[Encoding] Detected ${encoding} for file: ${path.basename(filePath)}`);
+    
+    try {
+        const decoder = new TextDecoder(encoding);
+        return decoder.decode(buffer);
+    } catch (err) {
+        // フォールバック: UTF-8で試す
+        connection.console.warn(`[Encoding] Failed to decode ${filePath} as ${encoding}, falling back to utf-8`);
+        const decoder = new TextDecoder('utf-8');
+        return decoder.decode(buffer);
+    }
+}
 
 /**
  * COBOL LSP設定インターフェース
@@ -67,7 +153,7 @@ let copybookResolver = new CopybookResolver({
     searchPaths: [],
     extensions: defaultSettings.copybookExtensions
 }, (message: string) => connection.console.log(message));
-let programResolver = new ProgramResolver();
+let programResolver = new ProgramResolver((message: string) => connection.console.log(message));
 let symbolIndex = new SymbolIndex(
     (message: string) => connection.console.log(message),
     defaultSettings.copybookExtensions
@@ -1775,7 +1861,7 @@ function loadCopybooksFromDocument(document: TextDocument): void {
         const copybookUri = URI.file(copybookPath).toString();
         
         try {
-            let copybookContent = fs.readFileSync(copybookPath, 'utf-8');
+            let copybookContent = readFileWithEncoding(copybookPath);
             
             // REPLACING ルールを適用
             if (copybookInfo.replacing.length > 0) {
