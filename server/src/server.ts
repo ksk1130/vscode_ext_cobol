@@ -111,17 +111,21 @@ function detectEncoding(buffer: Buffer): 'utf-8' | 'shift_jis' {
 function readFileWithEncoding(filePath: string): string {
     const buffer = fs.readFileSync(filePath);
     const encoding = detectEncoding(buffer);
-    
-    logger.debug(`[Encoding] Detected ${encoding} for file: ${path.basename(filePath)}`);
-    
+
+    logger.debug(`[Encoding] Detected ${encoding} for file: ${filePath} (size=${buffer.length} bytes)`);
+
     try {
         const decoder = new TextDecoder(encoding);
-        return decoder.decode(buffer);
+        const content = decoder.decode(buffer);
+        logger.debug(`[Encoding] Successfully decoded ${filePath} as ${encoding}`);
+        return content;
     } catch (err) {
         // フォールバック: UTF-8で試す
         logger.warn(`[Encoding] Failed to decode ${filePath} as ${encoding}, falling back to utf-8`);
         const decoder = new TextDecoder('utf-8');
-        return decoder.decode(buffer);
+        const content = decoder.decode(buffer);
+        logger.debug(`[Encoding] Fallback decode succeeded for ${filePath} as utf-8`);
+        return content;
     }
 }
 
