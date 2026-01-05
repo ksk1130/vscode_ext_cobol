@@ -95,6 +95,7 @@ code --install-extension <package-name>-<version>.vsix
 - パース前にシーケンス領域（1-7 桁）を除去
 - .cpy はデフォルトで DATA DIVISION として扱う
 - COPYBOOK は REPLACING / DISJOINING / JOINING を適用した上でインデックス化
+- ロギングには LogTape (@logtape/logtape) を使用。server/src/logger.ts および client/src/logger.ts で設定
 
 ## 動作確認のチェックリスト
 - COBOL ファイルを開き、Ctrl+Click で以下を確認:
@@ -123,10 +124,11 @@ code --install-extension <package-name>-<version>.vsix
 - `build-vsix.bat` (Windows) / `./build-vsix.sh` (Linux/Mac) — ビルド＋VSIX作成を一括実行
 
 ## 依存関係
-- クライアント: vscode-languageclient (^9.0.1)
-- サーバー: vscode-languageserver (^9.0.1), vscode-languageserver-textdocument (^1.0.11), vscode-uri (^3.0.0)
+- クライアント: vscode-languageclient (^9.0.1), @logtape/logtape (^1.3.5)
+- サーバー: vscode-languageserver (^9.0.1), vscode-languageserver-textdocument (^1.0.11), vscode-uri (^3.0.0), @logtape/logtape (^1.3.5)
 - 共通開発: typescript (^5.0.0), @types/node (^18.0.0), @types/vscode (^1.75.0, client)
 - 配布用: @vscode/vsce (^2.19.0, package 用)
+- ロギング: @logtape/logtape (^1.3.5) - 構造化ロギングライブラリ
 
 ## 設定
 VS Code の設定（settings.json）で以下をカスタマイズできます：
