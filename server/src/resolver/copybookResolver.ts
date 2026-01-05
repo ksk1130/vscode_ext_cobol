@@ -54,11 +54,12 @@ export class CopybookResolver {
         // COPY CUSTMAST IN LIBNAME.
         // COPY CUSTMAST REPLACING ==CUST== BY ==CUSTOMER==.
         // COPY CP-SMPL2 DISJOINING XXX JOINING TODAY AS PREFIX.
+        // 日本語を含むUnicode文字をサポート: [\w\u0080-\uFFFF\-]+
         const patterns = [
-            /COPY\s+([A-Z0-9\-]+)/i,
+            /COPY\s+([\w\u0080-\uFFFF\-]+)/i,
             /COPY\s+"([^"]+)"/i,
             /COPY\s+'([^']+)'/i,
-            /COPY\s+([A-Z0-9\-]+)\s+IN\s+([A-Z0-9\-]+)/i
+            /COPY\s+([\w\u0080-\uFFFF\-]+)\s+IN\s+([\w\u0080-\uFFFF\-]+)/i
         ];
         
         for (const pattern of patterns) {
@@ -108,7 +109,8 @@ export class CopybookResolver {
         const rules: ReplacingRule[] = [];
         
         // DISJOINING <old> JOINING <new> AS PREFIX のパターン
-        const pattern = /DISJOINING\s+([A-Z0-9\-]+)\s+JOINING\s+([A-Z0-9\-]+)\s+AS\s+PREFIX/gi;
+        // 日本語を含むUnicode文字をサポート: [\w\u0080-\uFFFF\-]+
+        const pattern = /DISJOINING\s+([\w\u0080-\uFFFF\-]+)\s+JOINING\s+([\w\u0080-\uFFFF\-]+)\s+AS\s+PREFIX/gi;
         let match;
         
         while ((match = pattern.exec(line)) !== null) {
