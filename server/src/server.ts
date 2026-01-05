@@ -49,18 +49,51 @@ let workspaceRoot: string | null = null;
  * LSP初期化時にワークスペース情報を受け取り、各種リゾルバーを構築する。
  * @param params クライアントから渡される初期化パラメータ
  */
-connection.onInitialize((params:  InitializeParams) => {
+connection.onInitialize(async (params:  InitializeParams) => {
     workspaceRoot = params.rootUri ?  URI.parse(params.rootUri).fsPath : null;
+    
+    // クライアントから設定を取得
+    let copybookPaths: string[] = [];
+    let copybookExtensions: string[] = ['.cpy', '.CPY', '.cbl', '.CBL', ''];
+    
+    try {
+        // cobol.copybookPaths 設定を取得
+        const config = await connection.workspace.getConfiguration('cobol');
+        copybookPaths = config.copybookPaths || [];
+        copybookExtensions = config.copybookExtensions || ['.cpy', '.CPY', '.cbl', '.CBL', ''];
+        
+        connection.console.log(`[Config] copybookPaths from settings: ${JSON.stringify(copybookPaths)}`);
+        connection.console.log(`[Config] copybookExtensions from settings: ${JSON.stringify(copybookExtensions)}`);
+    } catch (err) {
+        // 設定取得に失敗した場合はデフォルト値を使用
+        connection.console.log(`[Config] Failed to get configuration, using defaults: ${err}`);
+        copybookPaths = ['./copybooks', './copy', './COPY'];
+    }
+    
+    // パスを絶対パスに変換（相対パスの場合はworkspaceRootを基準に）
+    const resolvedPaths = copybookPaths.map(p => {
+        if (path.isAbsolute(p)) {
+            // 絶対パスの場合はそのまま使用
+            return p;
+        } else if (workspaceRoot) {
+            // 相対パスの場合はworkspaceRootを基準に解決
+            return path.resolve(workspaceRoot, p);
+        } else {
+            return p;
+        }
+    }).filter(p => p);
+    
+    // 環境変数 COBOL_COPYPATH があれば追加
+    if (process.env.COBOL_COPYPATH) {
+        resolvedPaths.push(process.env.COBOL_COPYPATH);
+    }
+    
+    connection.console.log(`[Config] Resolved copybook paths: ${JSON.stringify(resolvedPaths)}`);
     
     // リゾルバー初期化
     copybookResolver = new CopybookResolver({
-        searchPaths: [
-            workspaceRoot ?  path.join(workspaceRoot, 'copybooks') : '',
-            workspaceRoot ? path.join(workspaceRoot, 'copy') : '',
-            // cobol標準のCOPYBOOKパス
-            process.env.COBOL_COPYPATH || ''
-        ].filter(p => p),
-        extensions: ['.cpy', '.CPY', '.cbl', '.CBL', '']
+        searchPaths: resolvedPaths,
+        extensions: copybookExtensions
     }, (message: string) => {
         // CopybookResolverからのログメッセージをクライアントに送信
         connection.console.log(message);
@@ -93,6 +126,52 @@ connection.onInitialize((params:  InitializeParams) => {
             }
         }
     };
+});
+
+/**
+ * 設定変更時の処理
+ * copybookPaths や copybookExtensions の設定が変更された場合、リゾルバーを再初期化
+ */
+connection.onDidChangeConfiguration(async change => {
+    try {
+        // 設定を再取得
+        const config = await connection.workspace.getConfiguration('cobol');
+        const copybookPaths: string[] = config.copybookPaths || ['./copybooks', './copy', './COPY'];
+        const copybookExtensions: string[] = config.copybookExtensions || ['.cpy', '.CPY', '.cbl', '.CBL', ''];
+        
+        connection.console.log(`[Config Changed] copybookPaths: ${JSON.stringify(copybookPaths)}`);
+        connection.console.log(`[Config Changed] copybookExtensions: ${JSON.stringify(copybookExtensions)}`);
+        
+        // パスを絶対パスに変換
+        const resolvedPaths = copybookPaths.map(p => {
+            if (path.isAbsolute(p)) {
+                return p;
+            } else if (workspaceRoot) {
+                return path.resolve(workspaceRoot, p);
+            } else {
+                return p;
+            }
+        }).filter(p => p);
+        
+        if (process.env.COBOL_COPYPATH) {
+            resolvedPaths.push(process.env.COBOL_COPYPATH);
+        }
+        
+        connection.console.log(`[Config Changed] Resolved paths: ${JSON.stringify(resolvedPaths)}`);
+        
+        // リゾルバーを再初期化
+        copybookResolver = new CopybookResolver({
+            searchPaths: resolvedPaths,
+            extensions: copybookExtensions
+        }, (message: string) => {
+            connection.console.log(message);
+        });
+        
+        // COPYBOOK ファイルを再スキャン
+        copybookResolver.scanAndLogCopybookFiles();
+    } catch (err) {
+        connection.console.log(`[Config Changed] Error: ${err}`);
+    }
 });
 
 /**
@@ -979,22 +1058,20 @@ function getCopybookCompletions(document: TextDocument): CompletionItem[] {
     const sourceFileDir = path.dirname(URI.parse(document.uri).fsPath);
     
     try {
-        // COPYBOOK 検索パスから候補を取得
-        const searchPaths = [
-            workspaceRoot ? path.join(workspaceRoot, 'copybooks') : '',
-            workspaceRoot ? path.join(workspaceRoot, 'copy') : '',
-            workspaceRoot ? path.join(workspaceRoot, 'COPY') : '',
-            sourceFileDir
-        ].filter(p => p && fs.existsSync(p));
+        // CopybookResolverの設定から検索パスを取得
+        // sourceFileDirも検索対象に含める
+        const config = copybookResolver.getConfig();
+        const searchPaths = [sourceFileDir, ...config.searchPaths]
+            .filter(p => p && fs.existsSync(p));
         
-        const extensions = ['.cpy', '.CPY', '.cbl', '.CBL'];
+        const extensions = config.extensions;
         
         for (const searchPath of searchPaths) {
             const files = fs.readdirSync(searchPath);
             
             for (const file of files) {
                 const ext = path.extname(file);
-                if (extensions.includes(ext) || ext === '') {
+                if (extensions.includes(ext) || (extensions.includes('') && ext === '')) {
                     const basename = path.basename(file, ext);
                     
                     completions.push({

@@ -30,6 +30,13 @@ export class CopybookResolver {
     }
     
     /**
+     * 設定を取得
+     */
+    getConfig(): CopybookConfig {
+        return this.config;
+    }
+    
+    /**
      * COPY文からCOPYBOOK名とREPLACING/DISJOINING/JOINING句を抽出
      * @param line COPY文の行
      * @returns COPYBOOK名とREPLACINGルール配列
