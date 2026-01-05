@@ -46,6 +46,33 @@ let symbolIndex:  SymbolIndex;
 let workspaceRoot: string | null = null;
 
 /**
+ * COPYBOOK パス設定を解決する
+ * @param copybookPaths 設定から取得したパス配列
+ * @param workspaceRoot ワークスペースのルートパス
+ * @returns 解決された絶対パス配列
+ */
+function resolveCopybookPaths(copybookPaths: string[], workspaceRoot: string | null): string[] {
+    const resolvedPaths = copybookPaths.map(p => {
+        if (path.isAbsolute(p)) {
+            // 絶対パスの場合はそのまま使用
+            return p;
+        } else if (workspaceRoot) {
+            // 相対パスの場合はworkspaceRootを基準に解決
+            return path.resolve(workspaceRoot, p);
+        } else {
+            return p;
+        }
+    }).filter(p => p);
+    
+    // 環境変数 COBOL_COPYPATH があれば追加
+    if (process.env.COBOL_COPYPATH) {
+        resolvedPaths.push(process.env.COBOL_COPYPATH);
+    }
+    
+    return resolvedPaths;
+}
+
+/**
  * LSP初期化時にワークスペース情報を受け取り、各種リゾルバーを構築する。
  * @param params クライアントから渡される初期化パラメータ
  */
@@ -70,24 +97,8 @@ connection.onInitialize(async (params:  InitializeParams) => {
         copybookPaths = ['./copybooks', './copy', './COPY'];
     }
     
-    // パスを絶対パスに変換（相対パスの場合はworkspaceRootを基準に）
-    const resolvedPaths = copybookPaths.map(p => {
-        if (path.isAbsolute(p)) {
-            // 絶対パスの場合はそのまま使用
-            return p;
-        } else if (workspaceRoot) {
-            // 相対パスの場合はworkspaceRootを基準に解決
-            return path.resolve(workspaceRoot, p);
-        } else {
-            return p;
-        }
-    }).filter(p => p);
-    
-    // 環境変数 COBOL_COPYPATH があれば追加
-    if (process.env.COBOL_COPYPATH) {
-        resolvedPaths.push(process.env.COBOL_COPYPATH);
-    }
-    
+    // パスを解決
+    const resolvedPaths = resolveCopybookPaths(copybookPaths, workspaceRoot);
     connection.console.log(`[Config] Resolved copybook paths: ${JSON.stringify(resolvedPaths)}`);
     
     // リゾルバー初期化
@@ -132,7 +143,7 @@ connection.onInitialize(async (params:  InitializeParams) => {
  * 設定変更時の処理
  * copybookPaths や copybookExtensions の設定が変更された場合、リゾルバーを再初期化
  */
-connection.onDidChangeConfiguration(async change => {
+connection.onDidChangeConfiguration(async _change => {
     try {
         // 設定を再取得
         const config = await connection.workspace.getConfiguration('cobol');
@@ -142,21 +153,8 @@ connection.onDidChangeConfiguration(async change => {
         connection.console.log(`[Config Changed] copybookPaths: ${JSON.stringify(copybookPaths)}`);
         connection.console.log(`[Config Changed] copybookExtensions: ${JSON.stringify(copybookExtensions)}`);
         
-        // パスを絶対パスに変換
-        const resolvedPaths = copybookPaths.map(p => {
-            if (path.isAbsolute(p)) {
-                return p;
-            } else if (workspaceRoot) {
-                return path.resolve(workspaceRoot, p);
-            } else {
-                return p;
-            }
-        }).filter(p => p);
-        
-        if (process.env.COBOL_COPYPATH) {
-            resolvedPaths.push(process.env.COBOL_COPYPATH);
-        }
-        
+        // パスを解決
+        const resolvedPaths = resolveCopybookPaths(copybookPaths, workspaceRoot);
         connection.console.log(`[Config Changed] Resolved paths: ${JSON.stringify(resolvedPaths)}`);
         
         // リゾルバーを再初期化
@@ -1071,7 +1069,7 @@ function getCopybookCompletions(document: TextDocument): CompletionItem[] {
             
             for (const file of files) {
                 const ext = path.extname(file);
-                if (extensions.includes(ext) || (extensions.includes('') && ext === '')) {
+                if (extensions.includes(ext)) {
                     const basename = path.basename(file, ext);
                     
                     completions.push({
