@@ -778,9 +778,9 @@ function getWordAtPosition(document: TextDocument, position: Position): string |
     let currentPos = 0;
     for (const word of words) {
         const wordStart = line.indexOf(word, currentPos);
-        const wordEnd = wordStart + word. length;
+        const wordEnd = wordStart + word.length;
         
-        if (position.character >= wordStart && position. character <= wordEnd) {
+        if (position.character >= wordStart && position.character <= wordEnd) {
             return word;
         }
         
@@ -1320,8 +1320,8 @@ function validateDocument(document: TextDocument): void {
         }
         
         // MOVE, ADD, COMPUTE, IF, EVALUATE などで使用される変数を抽出
-        // 日本語を含むUnicode文字をサポート: [\w\u0080-\uFFFF][\w\u0080-\uFFFF\-]*
-        const words = contentLine.match(/\b[\w\u0080-\uFFFF][\w\u0080-\uFFFF\-]*\b/gi);
+        // 日本語を含むUnicode文字をサポート: [\w\u0080-\uFFFF\-]+
+        const words = contentLine.match(/\b[\w\u0080-\uFFFF\-]+\b/gi);
         if (!words) continue;
         
         for (const word of words) {
