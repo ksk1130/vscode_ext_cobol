@@ -341,7 +341,20 @@ export class SymbolIndex {
      * @returns COPYBOOK名（ファイル名から拡張子を除いたもの）
      */
     getCopybookName(copybookUri: string): string | null {
-        const match = copybookUri.match(/\/([^\/]+)\.cpy$/i);
-        return match ? match[1] : null;
+        try {
+            // Use Node.js path module for cross-platform compatibility
+            const path = require('path');
+            // Parse URI to file path first
+            const fsPath = copybookUri.replace(/^file:\/\//, '');
+            const basename = path.basename(fsPath);
+            const extname = path.extname(basename);
+            
+            if (extname.toLowerCase() === '.cpy') {
+                return basename.substring(0, basename.length - extname.length);
+            }
+            return basename;
+        } catch {
+            return null;
+        }
     }
 }

@@ -1168,14 +1168,16 @@ function getCobolKeywords(): CompletionItem[] {
 
 /**
  * 変数の補完候補を生成する。
+ * Generate variable completion items from current document and referenced COPYBOOKs.
  * @param document 現在のドキュメント
  * @returns 変数の CompletionItem 配列
  */
 function getVariableCompletions(document: TextDocument): CompletionItem[] {
     const completions: CompletionItem[] = [];
-    const addedVariables = new Set<string>(); // 重複チェック用
+    const addedVariables = new Set<string>(); // Track duplicates
     
-    // 現在のドキュメントからシンボルを取得
+    // Get symbols from current document and load referenced COPYBOOKs
+    // Note: loadCopybooksFromDocument uses internal caching to avoid repeated loading
     symbolIndex.indexDocument(document);
     loadCopybooksFromDocument(document);
     
