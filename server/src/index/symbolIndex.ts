@@ -367,6 +367,7 @@ export class SymbolIndex {
         const results: SymbolInfo[] = [];
         
         // 1. ドキュメント自身のシンボルを検索
+        this.log(`[SymbolIndex] Searching for symbol "${symbolName}" in ${documentUri}`);
         const documentSymbols = this.symbols.get(documentUri) || [];
         const matchedInDocument = documentSymbols.filter(s => 
             s.name.toUpperCase() === symbolName.toUpperCase()
@@ -376,6 +377,7 @@ export class SymbolIndex {
         // 2. 参照されているCOPYBOOK内のシンボルを検索
         const copybookRefs = this.copybookReferences.get(documentUri) || [];
         for (const ref of copybookRefs) {
+            this.log(`[SymbolIndex] Searching for symbol "${symbolName}" in COPYBOOK "${ref.name}" (${ref.uri})`);
             const copybookSymbols = this.symbols.get(ref.uri) || [];
             const matchedInCopybook = copybookSymbols.filter(s => 
                 s.name.toUpperCase() === symbolName.toUpperCase()
