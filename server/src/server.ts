@@ -141,7 +141,8 @@ connection.onDefinition((params: DefinitionParams): Definition | null => {
     const normalizedLine = contentLine.trim().toUpperCase();
     
     // 1. COPYBOOKの参照ジャンプ
-    if (normalizedLine.startsWith('COPY')) {
+    // Use regex to match COPY followed by whitespace to avoid matching COPYBOOK, COPY-FILE, etc.
+    if (/^COPY\s+/i.test(normalizedLine)) {
         return handleCopybookJump(document, contentLine);
     }
     
@@ -259,7 +260,8 @@ connection.onCompletion((params: CompletionParams): CompletionItem[] => {
     connection.console.log(`[Completion] Line: "${line}", Content: "${contentLine}", Trimmed: "${trimmedLine}", Position: ${params.position.line}:${params.position.character}`);
     
     // 1. COPY文の場合、COPYBOOKの補完候補を提供（最優先）
-    if (trimmedLine.startsWith('COPY')) {
+    // Use regex to match COPY followed by whitespace to avoid matching COPYBOOK, COPY-FILE, etc.
+    if (/^COPY\s+/i.test(trimmedLine)) {
         const copybookCompletions = getCopybookCompletions(document);
         completions.push(...copybookCompletions);
         return completions;
@@ -676,7 +678,8 @@ function searchInCopybooksWithPath(document: TextDocument, word: string): { symb
         const contentLine = stripSequenceArea(line);
         const normalizedLine = contentLine.trim().toUpperCase();
         
-        if (normalizedLine.startsWith('COPY')) {
+        // Use regex to match COPY followed by whitespace to avoid matching COPYBOOK, COPY-FILE, etc.
+        if (/^COPY\s+/i.test(normalizedLine)) {
             // COPY 文から COPYBOOK 名と REPLACING ルールを抽出
             const copybookInfo = copybookResolver.extractCopybookInfo(contentLine);
             if (!copybookInfo.name) continue;
@@ -724,7 +727,8 @@ function searchInCopybooks(document: TextDocument, word: string): Definition | n
         const contentLine = stripSequenceArea(line);
         const normalizedLine = contentLine.trim().toUpperCase();
         
-        if (normalizedLine.startsWith('COPY')) {
+        // Use regex to match COPY followed by whitespace to avoid matching COPYBOOK, COPY-FILE, etc.
+        if (/^COPY\s+/i.test(normalizedLine)) {
             // COPY 文から COPYBOOK 名と REPLACING ルールを抽出
             const copybookInfo = copybookResolver.extractCopybookInfo(contentLine);
             if (!copybookInfo.name) continue;
@@ -892,7 +896,8 @@ function getVariableCompletions(document: TextDocument): CompletionItem[] {
         const contentLine = stripSequenceArea(line);
         const normalizedLine = contentLine.trim().toUpperCase();
         
-        if (normalizedLine.startsWith('COPY')) {
+        // Use regex to match COPY followed by whitespace to avoid matching COPYBOOK, COPY-FILE, etc.
+        if (/^COPY\s+/i.test(normalizedLine)) {
             const copybookInfo = copybookResolver.extractCopybookInfo(contentLine);
             if (!copybookInfo.name) continue;
             
@@ -1217,7 +1222,8 @@ function validateDocument(document: TextDocument): void {
             const contentLine = stripSequenceArea(line);
             const normalizedLine = contentLine.trim().toUpperCase();
             
-            if (normalizedLine.startsWith('COPY')) {
+            // Use regex to match COPY followed by whitespace to avoid matching COPYBOOK, COPY-FILE, etc.
+            if (/^COPY\s+/i.test(normalizedLine)) {
                 const copybookName = copybookResolver.extractCopybookName(contentLine);
                 if (copybookName) {
                     const sourceFileDir = path.dirname(URI.parse(document.uri).fsPath);
@@ -1432,7 +1438,8 @@ function loadCopybooksFromDocument(document: TextDocument): void {
         const contentLine = stripSequenceArea(line);
         const normalizedLine = contentLine.trim().toUpperCase();
         
-        if (normalizedLine.startsWith('COPY')) {
+        // Use regex to match COPY followed by whitespace to avoid matching COPYBOOK, COPY-FILE, etc.
+        if (/^COPY\s+/i.test(normalizedLine)) {
             // COPY 文から COPYBOOK 名と REPLACING ルールを抽出
             const copybookInfo = copybookResolver.extractCopybookInfo(contentLine);
             if (!copybookInfo.name) continue;
