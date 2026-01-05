@@ -292,7 +292,46 @@ if (rule.isPrefix) {
 
 Prefix names containing hyphens (`-`) or ー (`ー`) are properly handled.
 
-### 例6: REPLACINGとの組み合わせ / Example 6: Combined with REPLACING
+### 例6: 複数のCOPY文 / Example 6: Multiple COPY Statements
+
+同じCOPYBOOKを異なる接頭辞で複数回COPYすることができます。各COPY文は独立して処理されます。
+
+You can COPY the same COPYBOOK multiple times with different prefixes. Each COPY statement is processed independently.
+
+**COPYBOOK (TEMPLATE.cpy):**
+```cobol
+       01  ＨＯＧＥＩ－１－レコード.
+           05  ＨＯＧＥＩ－１ー変数     PIC X(10).
+       01  ＨＯＧＥＩ－２－レコード.
+           05  ＨＯＧＥＩ－２ー変数     PIC X(10).
+       01  ＨＯＧＥＩ－３－レコード.
+           05  ＨＯＧＥＩ－３ー変数     PIC X(10).
+```
+
+**COBOL:**
+```cobol
+       COPY TEMPLATE DISJOINING ＨＯＧＥＩ－１ JOINING ＦＵＧＡ１ AS PREFIX.
+       COPY TEMPLATE DISJOINING ＨＯＧＥＩ－２ JOINING ＦＵＧＡ２ AS PREFIX.
+       COPY TEMPLATE DISJOINING ＨＯＧＥＩ－３ JOINING ＦＵＧＡ３ AS PREFIX.
+       
+       PROCEDURE DIVISION.
+           *> 各接頭辞変換は独立して動作
+           MOVE 'AAA' TO ＦＵＧＡ１ー変数.   *> ＨＯＧＥＩ－１ー変数 にマップ
+           MOVE 'BBB' TO ＦＵＧＡ２ー変数.   *> ＨＯＧＥＩ－２ー変数 にマップ
+           MOVE 'CCC' TO ＦＵＧＡ３ー変数.   *> ＨＯＧＥＩ－３ー変数 にマップ
+           *> F12 on each variable correctly jumps to its definition
+```
+
+**変換ルール / Transformation Rules:**
+- First COPY:  `ＨＯＧＥＩ－１ー変数` → `ＦＵＧＡ１ー変数`
+- Second COPY: `ＨＯＧＥＩ－２ー変数` → `ＦＵＧＡ２ー変数`
+- Third COPY:  `ＨＯＧＥＩ－３ー変数` → `ＦＵＧＡ３ー変数`
+
+各COPY文は独自の変換ルールを持ち、互いに干渉しません。「定義へジャンプ」(F12) は各変数について正しく動作します。
+
+Each COPY statement has its own transformation rules and they don't interfere with each other. "Go to Definition" (F12) works correctly for each variable.
+
+### 例7: REPLACINGとの組み合わせ / Example 7: Combined with REPLACING
 
 ```cobol
        COPY COPYBOOK
