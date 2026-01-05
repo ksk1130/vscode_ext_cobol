@@ -129,5 +129,40 @@ code --install-extension <package-name>-<version>.vsix
 - 配布用: @vscode/vsce (^2.19.0, package 用)
 
 ## 設定
-- COPYBOOK 検索パス: `copybooks/`、`copy/`、環境変数 `COBOL_COPYPATH`
-- 対応拡張子: .cpy, .cbl, .cob, .cobol（大文字小文字を区別しない）
+VS Code の設定（settings.json）で以下をカスタマイズできます：
+
+- **cobol.copybookPaths**: COPYBOOK検索パス（配列）
+  - デフォルト: `["./copybooks", "./copy", "./COPY"]`
+  - 例: `["./lib/copybooks", "./includes"]`
+  - 相対パスはワークスペースルートからの相対パスとして解釈されます
+  
+- **cobol.copybookExtensions**: COPYBOOKファイルの拡張子（配列）
+  - デフォルト: `[".cpy", ".CPY", ".cbl", ".CBL", ""]`
+  - 空文字列 `""` は拡張子なしのファイルを許可します
+  
+- **cobol.programSearchPaths**: COBOLプログラム検索パス（配列）
+  - デフォルト: `["./src", "./programs", "./SRC"]`
+  
+- **cobol.fileExtensions**: COBOLファイルの拡張子（配列）
+  - デフォルト: `[".cbl", ".cob", ".cobol", ".CBL", ".COB", ".COBOL"]`
+  
+- **cobol.enableRulers**: COBOLファイルで7, 8, 12列目に縦線を表示（boolean）
+  - デフォルト: `true`
+
+環境変数 `COBOL_COPYPATH` も引き続きサポートされます。
+
+### 設定例
+`.vscode/settings.json`:
+```json
+{
+  "cobol.copybookPaths": [
+    "./lib/copybooks",
+    "./external/includes"
+  ],
+  "cobol.copybookExtensions": [
+    ".cpy",
+    ".copy",
+    ""
+  ]
+}
+```
