@@ -283,7 +283,8 @@ async function updateConfiguration() {
                 copybookExtensions: config.copybookExtensions || defaultSettings.copybookExtensions
             };
         } catch (err) {
-            logger.warn(`[updateConfiguration] Failed to get configuration: ${err}`);
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            logger.warn(`[updateConfiguration] Failed to get configuration: ${errorMessage}`);
             globalSettings = defaultSettings;
         }
     }
@@ -1835,7 +1836,7 @@ function validateDocument(document: TextDocument): void {
     } catch (err) {
         // エラーが発生した場合はログに記録し、空の診断を送信
         const errorMessage = err instanceof Error ? err.message : String(err);
-        logger.error(`[validateDocument] Error: ${errorMessage}`);
+        logger.error(`[validateDocument] ${errorMessage}`);
         connection.sendDiagnostics({ uri: document.uri, diagnostics: [] });
     }
 }
