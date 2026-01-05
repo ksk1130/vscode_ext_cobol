@@ -53,7 +53,7 @@ const documents = new TextDocuments(TextDocument);
 
 let copybookResolver: CopybookResolver;
 let programResolver: ProgramResolver;
-let symbolIndex:  SymbolIndex;
+let symbolIndex = new SymbolIndex();  // Initialize immediately to avoid undefined errors
 let workspaceRoot: string | null = null;
 let hasConfigurationCapability = false;
 let hasWorkspaceFolderCapability = false;
@@ -200,13 +200,11 @@ async function updateConfiguration() {
         extensions: globalSettings.copybookExtensions
     });
     
-    // ProgramResolverとSymbolIndexの初期化
+    // ProgramResolverの初期化
     if (!programResolver) {
         programResolver = new ProgramResolver();
     }
-    if (!symbolIndex) {
-        symbolIndex = new SymbolIndex();
-    }
+    // Note: symbolIndex is now initialized at module level, no need to check here
     
     // ワークスペースインデックス作成
     if (workspaceRoot) {
