@@ -112,14 +112,14 @@ function readFileWithEncoding(filePath: string): string {
     const buffer = fs.readFileSync(filePath);
     const encoding = detectEncoding(buffer);
     
-    connection.console.log(`[Encoding] Detected ${encoding} for file: ${path.basename(filePath)}`);
+    logger.debug(`[Encoding] Detected ${encoding} for file: ${path.basename(filePath)}`);
     
     try {
         const decoder = new TextDecoder(encoding);
         return decoder.decode(buffer);
     } catch (err) {
         // フォールバック: UTF-8で試す
-        connection.console.warn(`[Encoding] Failed to decode ${filePath} as ${encoding}, falling back to utf-8`);
+        logger.warn(`[Encoding] Failed to decode ${filePath} as ${encoding}, falling back to utf-8`);
         const decoder = new TextDecoder('utf-8');
         return decoder.decode(buffer);
     }
@@ -140,7 +140,8 @@ const documents = new TextDocuments(TextDocument);
 
 // Configure logger - if it fails, continue without structured logging
 configureLogger().catch(err => {
-    connection.console.error(`Failed to configure LogTape logger: ${err}`);
+    // Use console.error as fallback if logger configuration fails
+    console.error(`Failed to configure LogTape logger: ${err}`);
 });
 
 const logger = getServerLogger();
@@ -156,9 +157,9 @@ const defaultSettings: CobolSettings = {
 let globalSettings: CobolSettings = defaultSettings;
 
 let copybookResolver: CopybookResolver;
-let programResolver = new ProgramResolver((message: string) => connection.console.log(message));
+let programResolver = new ProgramResolver((message: string) => logger.debug(message));
 let symbolIndex = new SymbolIndex(
-    (message: string) => connection.console.log(message),
+    (message: string) => logger.debug(message),
     defaultSettings.copybookExtensions
 );
 let workspaceRoot: string | null = null;
@@ -282,7 +283,7 @@ async function updateConfiguration() {
                 copybookExtensions: config.copybookExtensions || defaultSettings.copybookExtensions
             };
         } catch (err) {
-            connection.console.log(`[updateConfiguration] Failed to get configuration: ${err}`);
+            logger.warn(`[updateConfiguration] Failed to get configuration: ${err}`);
             globalSettings = defaultSettings;
         }
     }
@@ -295,7 +296,7 @@ async function updateConfiguration() {
     copybookResolver = new CopybookResolver({
         searchPaths: searchPaths,
         extensions: globalSettings.copybookExtensions
-    }, (message: string) => connection.console.log(message));
+    }, (message: string) => logger.debug(message));
     
     // Update symbolIndex with new copybook extensions configuration
     symbolIndex.setCopybookExtensions(globalSettings.copybookExtensions);
@@ -307,8 +308,8 @@ async function updateConfiguration() {
         programResolver.indexWorkspace(workspaceRoot);
     }
     
-    connection.console.log(`[updateConfiguration] Copybook search paths: ${searchPaths.join(', ')}`);
-    connection.console.log(`[updateConfiguration] Copybook extensions: ${globalSettings.copybookExtensions.join(', ')}`);
+    logger.debug(`[updateConfiguration] Copybook search paths: ${searchPaths.join(', ')}`);
+    logger.debug(`[updateConfiguration] Copybook extensions: ${globalSettings.copybookExtensions.join(', ')}`);
 }
 
 /**
@@ -419,7 +420,7 @@ connection.onHover((params: HoverParams): Hover | null => {
     
     // COPYBOOK参照を含めてシンボルを検索
     const symbols = symbolIndex.findSymbolsWithCopybookContext(document.uri, word);
-    connection.console.log(`[Hover] Found ${symbols.length} symbols with name "${word}"`);
+    logger.debug(`[Hover] Found ${symbols.length} symbols with name "${word}"`);
     
     if (symbols.length > 0) {
         // 最初に見つかったシンボルを返す（優先順位: ドキュメント内 > COPYBOOK）
@@ -428,11 +429,11 @@ connection.onHover((params: HoverParams): Hover | null => {
         
         // 複数のCOPYBOOKに同じ変数名がある場合の情報を追加
         if (symbols.length > 1) {
-            connection.console.log(`[Hover] Multiple definitions found for "${word}":`);
+            logger.debug(`[Hover] Multiple definitions found for "${word}":`);
             symbols.forEach((s, idx) => {
                 const srcUri = s.copybookUri || document.uri;
                 const srcName = path.basename(URI.parse(srcUri).fsPath);
-                connection.console.log(`[Hover]   ${idx + 1}. ${srcName} (line ${s.line + 1})`);
+                logger.debug(`[Hover]   ${idx + 1}. ${srcName} (line ${s.line + 1})`);
             });
         }
         
@@ -949,11 +950,11 @@ function handleVariableJump(document:  TextDocument, word: string): Definition |
         
         // 複数定義がある場合はログに記録
         if (symbols.length > 1) {
-            connection.console.log(`[Jump] Multiple definitions found for "${word}":`);
+            logger.debug(`[Jump] Multiple definitions found for "${word}":`);
             symbols.forEach((s, idx) => {
                 const srcUri = s.copybookUri || document.uri;
                 const srcName = path.basename(URI.parse(srcUri).fsPath);
-                connection.console.log(`[Jump]   ${idx + 1}. ${srcName} (line ${s.line + 1})`);
+                logger.debug(`[Jump]   ${idx + 1}. ${srcName} (line ${s.line + 1})`);
             });
         }
         
@@ -976,32 +977,32 @@ function searchInCopybooksWithPath(document: TextDocument, word: string): { symb
     const lines = text.split('\n');
     const sourceFileDir = path.dirname(URI.parse(document.uri).fsPath);
     
-    connection.console.log(`[DEBUG-PREFIX] searchInCopybooksWithPath() called with word: "${word}"`);
+    logger.debug(`[DEBUG-PREFIX] searchInCopybooksWithPath() called with word: "${word}"`);
     
     // 複数行にわたるCOPY文を結合
     const copyStatements = collectCopyStatements(lines);
-    connection.console.log(`[DEBUG-PREFIX] Found ${copyStatements.length} COPY statements`);
+    logger.debug(`[DEBUG-PREFIX] Found ${copyStatements.length} COPY statements`);
     
     for (const {statement: contentLine} of copyStatements) {
-        connection.console.log(`[DEBUG-PREFIX] Processing COPY statement: "${contentLine.substring(0, 100)}..."`);
+        logger.debug(`[DEBUG-PREFIX] Processing COPY statement: "${contentLine.substring(0, 100)}..."`);
         
         // COPY 文から COPYBOOK 名と REPLACING ルールを抽出
         const copybookInfo = copybookResolver.extractCopybookInfo(contentLine);
         if (!copybookInfo.name) {
-            connection.console.log(`[DEBUG-PREFIX] No copybook name found, skipping`);
+            logger.debug(`[DEBUG-PREFIX] No copybook name found, skipping`);
             continue;
         }
         
-        connection.console.log(`[DEBUG-PREFIX] Copybook name: "${copybookInfo.name}"`);
-        connection.console.log(`[DEBUG-PREFIX] Replacing rules: ${JSON.stringify(copybookInfo.replacing)}`);
+        logger.debug(`[DEBUG-PREFIX] Copybook name: "${copybookInfo.name}"`);
+        logger.debug(`[DEBUG-PREFIX] Replacing rules: ${JSON.stringify(copybookInfo.replacing)}`);
         
         const copybookPath = copybookResolver.resolveCopybook(copybookInfo.name, sourceFileDir);
         if (!copybookPath) {
-            connection.console.log(`[DEBUG-PREFIX] Copybook path not resolved, skipping`);
+            logger.debug(`[DEBUG-PREFIX] Copybook path not resolved, skipping`);
             continue;
         }
         
-        connection.console.log(`[DEBUG-PREFIX] Copybook path: "${copybookPath}"`);
+        logger.debug(`[DEBUG-PREFIX] Copybook path: "${copybookPath}"`);
         
         // コピーブックのドキュメントを取得して記号を検索
         const copybookUri = URI.file(copybookPath).toString();
@@ -1009,8 +1010,8 @@ function searchInCopybooksWithPath(document: TextDocument, word: string): { symb
         // REPLACING が適用された記号名で検索
         let searchWord = word;
         if (copybookInfo.replacing.length > 0) {
-            connection.console.log(`[DEBUG-PREFIX] Applying reverse transformation...`);
-            connection.console.log(`[DEBUG-PREFIX] Original word: "${searchWord}"`);
+            logger.debug(`[DEBUG-PREFIX] Applying reverse transformation...`);
+            logger.debug(`[DEBUG-PREFIX] Original word: "${searchWord}"`);
             
             // 逆変換：現在のコード内の名前 → COPYBOOK 内の元の名前
             for (const rule of copybookInfo.replacing) {
@@ -1023,15 +1024,15 @@ function searchInCopybooksWithPath(document: TextDocument, word: string): { symb
                     // - (U+002D): ASCII hyphen
                     // ー (U+30FC): Full-width katakana prolonged sound mark (Shift-JIS 817C)
                     const regex = new RegExp(`^${escapedTo}([-ー－][\w\u0080-\uFFFF\-ー－]+)$`, 'i');
-                    connection.console.log(`[DEBUG-PREFIX] PREFIX rule: from="${rule.from}" to="${rule.to}"`);
-                    connection.console.log(`[DEBUG-PREFIX] PREFIX regex pattern: ${regex.source}`);
-                    connection.console.log(`[DEBUG-PREFIX] Testing regex against: "${searchWord}"`);
+                    logger.debug(`[DEBUG-PREFIX] PREFIX rule: from="${rule.from}" to="${rule.to}"`);
+                    logger.debug(`[DEBUG-PREFIX] PREFIX regex pattern: ${regex.source}`);
+                    logger.debug(`[DEBUG-PREFIX] Testing regex against: "${searchWord}"`);
                     
                     const match = searchWord.match(regex);
                     if (match) {
-                        connection.console.log(`[DEBUG-PREFIX] Regex matched! Groups: ${JSON.stringify(match)}`);
+                        logger.debug(`[DEBUG-PREFIX] Regex matched! Groups: ${JSON.stringify(match)}`);
                     } else {
-                        connection.console.log(`[DEBUG-PREFIX] Regex did NOT match`);
+                        logger.debug(`[DEBUG-PREFIX] Regex did NOT match`);
                     }
                     
                     searchWord = searchWord.replace(regex, `${rule.from}$1`);
@@ -1039,33 +1040,33 @@ function searchInCopybooksWithPath(document: TextDocument, word: string): { symb
                     // 通常の単語置換の逆変換
                     const escapedTo = rule.to.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
                     const regex = new RegExp(`^${escapedTo}$`, 'i');
-                    connection.console.log(`[DEBUG-PREFIX] WORD rule: from="${rule.from}" to="${rule.to}"`);
-                    connection.console.log(`[DEBUG-PREFIX] WORD regex pattern: ${regex.source}`);
+                    logger.debug(`[DEBUG-PREFIX] WORD rule: from="${rule.from}" to="${rule.to}"`);
+                    logger.debug(`[DEBUG-PREFIX] WORD regex pattern: ${regex.source}`);
                     searchWord = searchWord.replace(regex, rule.from);
                 }
                 
                 if (beforeTransform !== searchWord) {
-                    connection.console.log(`[DEBUG-PREFIX] Transformed: "${beforeTransform}" → "${searchWord}"`);
+                    logger.debug(`[DEBUG-PREFIX] Transformed: "${beforeTransform}" → "${searchWord}"`);
                 } else {
-                    connection.console.log(`[DEBUG-PREFIX] No transformation applied (word unchanged)`);
+                    logger.debug(`[DEBUG-PREFIX] No transformation applied (word unchanged)`);
                 }
             }
             
-            connection.console.log(`[DEBUG-PREFIX] Final search word after all transformations: "${searchWord}"`);
+            logger.debug(`[DEBUG-PREFIX] Final search word after all transformations: "${searchWord}"`);
         }
         
-        connection.console.log(`[DEBUG-PREFIX] Searching for symbol "${searchWord}" in copybook "${copybookUri}"`);
+        logger.debug(`[DEBUG-PREFIX] Searching for symbol "${searchWord}" in copybook "${copybookUri}"`);
         const copybookSymbol = symbolIndex.findSymbol(copybookUri, searchWord);
         
         if (copybookSymbol) {
-            connection.console.log(`[DEBUG-PREFIX] ✓ Symbol found! line=${copybookSymbol.line}, col=${copybookSymbol.column}`);
+            logger.debug(`[DEBUG-PREFIX] ✓ Symbol found! line=${copybookSymbol.line}, col=${copybookSymbol.column}`);
             return { symbol: copybookSymbol, copybookPath };
         } else {
-            connection.console.log(`[DEBUG-PREFIX] ✗ Symbol NOT found in this copybook`);
+            logger.debug(`[DEBUG-PREFIX] ✗ Symbol NOT found in this copybook`);
         }
     }
     
-    connection.console.log(`[DEBUG-PREFIX] Symbol "${word}" not found in any copybook`);
+    logger.debug(`[DEBUG-PREFIX] Symbol "${word}" not found in any copybook`);
     return null;
 }
 
@@ -1080,32 +1081,32 @@ function searchInCopybooks(document: TextDocument, word: string): Definition | n
     const lines = text.split('\n');
     const sourceFileDir = path.dirname(URI.parse(document.uri).fsPath);
     
-    connection.console.log(`[DEBUG-PREFIX] searchInCopybooks() called with word: "${word}"`);
+    logger.debug(`[DEBUG-PREFIX] searchInCopybooks() called with word: "${word}"`);
     
     // 複数行にわたるCOPY文を結合
     const copyStatements = collectCopyStatements(lines);
-    connection.console.log(`[DEBUG-PREFIX] Found ${copyStatements.length} COPY statements`);
+    logger.debug(`[DEBUG-PREFIX] Found ${copyStatements.length} COPY statements`);
     
     for (const {statement: contentLine} of copyStatements) {
-        connection.console.log(`[DEBUG-PREFIX] Processing COPY statement: "${contentLine.substring(0, 100)}..."`);
+        logger.debug(`[DEBUG-PREFIX] Processing COPY statement: "${contentLine.substring(0, 100)}..."`);
         
         // COPY 文から COPYBOOK 名と REPLACING ルールを抽出
         const copybookInfo = copybookResolver.extractCopybookInfo(contentLine);
         if (!copybookInfo.name) {
-            connection.console.log(`[DEBUG-PREFIX] No copybook name found, skipping`);
+            logger.debug(`[DEBUG-PREFIX] No copybook name found, skipping`);
             continue;
         }
         
-        connection.console.log(`[DEBUG-PREFIX] Copybook name: "${copybookInfo.name}"`);
-        connection.console.log(`[DEBUG-PREFIX] Replacing rules: ${JSON.stringify(copybookInfo.replacing)}`);
+        logger.debug(`[DEBUG-PREFIX] Copybook name: "${copybookInfo.name}"`);
+        logger.debug(`[DEBUG-PREFIX] Replacing rules: ${JSON.stringify(copybookInfo.replacing)}`);
         
         const copybookPath = copybookResolver.resolveCopybook(copybookInfo.name, sourceFileDir);
         if (!copybookPath) {
-            connection.console.log(`[DEBUG-PREFIX] Copybook path not resolved, skipping`);
+            logger.debug(`[DEBUG-PREFIX] Copybook path not resolved, skipping`);
             continue;
         }
         
-        connection.console.log(`[DEBUG-PREFIX] Copybook path: "${copybookPath}"`);
+        logger.debug(`[DEBUG-PREFIX] Copybook path: "${copybookPath}"`);
         
         // コピーブックのドキュメントを取得して記号を検索
         const copybookUri = URI.file(copybookPath).toString();
@@ -1113,8 +1114,8 @@ function searchInCopybooks(document: TextDocument, word: string): Definition | n
         // REPLACING が適用された記号名で検索
         let searchWord = word;
         if (copybookInfo.replacing.length > 0) {
-            connection.console.log(`[DEBUG-PREFIX] Applying reverse transformation...`);
-            connection.console.log(`[DEBUG-PREFIX] Original word: "${searchWord}"`);
+            logger.debug(`[DEBUG-PREFIX] Applying reverse transformation...`);
+            logger.debug(`[DEBUG-PREFIX] Original word: "${searchWord}"`);
             
             // 逆変換：現在のコード内の名前 → COPYBOOK 内の元の名前
             for (const rule of copybookInfo.replacing) {
@@ -1127,15 +1128,15 @@ function searchInCopybooks(document: TextDocument, word: string): Definition | n
                     // - (U+002D): ASCII hyphen
                     // ー (U+30FC): Full-width katakana prolonged sound mark (Shift-JIS 817C)
                     const regex = new RegExp(`^${escapedTo}([-ー－][\w\u0080-\uFFFF\-ー－]+)$`, 'i');
-                    connection.console.log(`[DEBUG-PREFIX] PREFIX rule: from="${rule.from}" to="${rule.to}"`);
-                    connection.console.log(`[DEBUG-PREFIX] PREFIX regex pattern: ${regex.source}`);
-                    connection.console.log(`[DEBUG-PREFIX] Testing regex against: "${searchWord}"`);
+                    logger.debug(`[DEBUG-PREFIX] PREFIX rule: from="${rule.from}" to="${rule.to}"`);
+                    logger.debug(`[DEBUG-PREFIX] PREFIX regex pattern: ${regex.source}`);
+                    logger.debug(`[DEBUG-PREFIX] Testing regex against: "${searchWord}"`);
                     
                     const match = searchWord.match(regex);
                     if (match) {
-                        connection.console.log(`[DEBUG-PREFIX] Regex matched! Groups: ${JSON.stringify(match)}`);
+                        logger.debug(`[DEBUG-PREFIX] Regex matched! Groups: ${JSON.stringify(match)}`);
                     } else {
-                        connection.console.log(`[DEBUG-PREFIX] Regex did NOT match`);
+                        logger.debug(`[DEBUG-PREFIX] Regex did NOT match`);
                     }
                     
                     searchWord = searchWord.replace(regex, `${rule.from}$1`);
@@ -1143,36 +1144,36 @@ function searchInCopybooks(document: TextDocument, word: string): Definition | n
                     // 通常の単語置換の逆変換
                     const escapedTo = rule.to.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
                     const regex = new RegExp(`^${escapedTo}$`, 'i');
-                    connection.console.log(`[DEBUG-PREFIX] WORD rule: from="${rule.from}" to="${rule.to}"`);
-                    connection.console.log(`[DEBUG-PREFIX] WORD regex pattern: ${regex.source}`);
+                    logger.debug(`[DEBUG-PREFIX] WORD rule: from="${rule.from}" to="${rule.to}"`);
+                    logger.debug(`[DEBUG-PREFIX] WORD regex pattern: ${regex.source}`);
                     searchWord = searchWord.replace(regex, rule.from);
                 }
                 
                 if (beforeTransform !== searchWord) {
-                    connection.console.log(`[DEBUG-PREFIX] Transformed: "${beforeTransform}" → "${searchWord}"`);
+                    logger.debug(`[DEBUG-PREFIX] Transformed: "${beforeTransform}" → "${searchWord}"`);
                 } else {
-                    connection.console.log(`[DEBUG-PREFIX] No transformation applied (word unchanged)`);
+                    logger.debug(`[DEBUG-PREFIX] No transformation applied (word unchanged)`);
                 }
             }
             
-            connection.console.log(`[DEBUG-PREFIX] Final search word after all transformations: "${searchWord}"`);
+            logger.debug(`[DEBUG-PREFIX] Final search word after all transformations: "${searchWord}"`);
         }
         
-        connection.console.log(`[DEBUG-PREFIX] Searching for symbol "${searchWord}" in copybook "${copybookUri}"`);
+        logger.debug(`[DEBUG-PREFIX] Searching for symbol "${searchWord}" in copybook "${copybookUri}"`);
         const copybookSymbol = symbolIndex.findSymbol(copybookUri, searchWord);
         
         if (copybookSymbol) {
-            connection.console.log(`[DEBUG-PREFIX] ✓ Symbol found! line=${copybookSymbol.line}, col=${copybookSymbol.column}`);
+            logger.debug(`[DEBUG-PREFIX] ✓ Symbol found! line=${copybookSymbol.line}, col=${copybookSymbol.column}`);
             return Location.create(
                 copybookUri,
                 Range.create(copybookSymbol.line, copybookSymbol.column, copybookSymbol.line, copybookSymbol.column + searchWord.length)
             );
         } else {
-            connection.console.log(`[DEBUG-PREFIX] ✗ Symbol NOT found in this copybook`);
+            logger.debug(`[DEBUG-PREFIX] ✗ Symbol NOT found in this copybook`);
         }
     }
     
-    connection.console.log(`[DEBUG-PREFIX] Symbol "${word}" not found in any copybook`);
+    logger.debug(`[DEBUG-PREFIX] Symbol "${word}" not found in any copybook`);
     return null;
 }
 
