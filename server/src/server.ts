@@ -68,7 +68,7 @@ let copybookResolver = new CopybookResolver({
     extensions: defaultSettings.copybookExtensions
 }, (message: string) => connection.console.log(message));
 let programResolver = new ProgramResolver();
-let symbolIndex = new SymbolIndex();
+let symbolIndex = new SymbolIndex((message: string) => connection.console.log(message));
 let workspaceRoot: string | null = null;
 let hasConfigurationCapability = false;
 let hasWorkspaceFolderCapability = false;
@@ -230,6 +230,9 @@ documents.onDidChangeContent(change => {
     connection.console.log(`[onDidChangeContent] Document: ${change.document.uri.substring(change.document.uri.lastIndexOf('/'))}, Symbols: ${allSymbols.length}`);
     loadCopybooksFromDocument(change.document);
     
+    // Log COPYBOOK table status after loading
+    symbolIndex.logCopybookTableStatus(change.document.uri);
+    
     // 診断を実行
     validateDocument(change.document);
 });
@@ -246,6 +249,9 @@ documents.onDidOpen(event => {
     const allSymbols = symbolIndex.getAllSymbols(event.document.uri);
     connection.console.log(`[onDidOpen] Document: ${event.document.uri.substring(event.document.uri.lastIndexOf('/'))}, Symbols: ${allSymbols.length}`);
     loadCopybooksFromDocument(event.document);
+    
+    // Log COPYBOOK table status after loading
+    symbolIndex.logCopybookTableStatus(event.document.uri);
     
     // 診断を実行
     validateDocument(event.document);

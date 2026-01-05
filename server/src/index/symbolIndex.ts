@@ -47,6 +47,17 @@ export class SymbolIndex {
     private symbols: Map<string, SymbolInfo[]> = new Map();
     // ドキュメントURIをキーとして、そのドキュメントで参照されているCOPYBOOKのリストを保持
     private copybookReferences: Map<string, CopybookReference[]> = new Map();
+    private logCallback?: (message: string) => void;
+    
+    constructor(logCallback?: (message: string) => void) {
+        this.logCallback = logCallback;
+    }
+    
+    private log(message: string): void {
+        if (this.logCallback) {
+            this.logCallback(message);
+        }
+    }
     
     /**
      * ドキュメントから変数・パラグラフ・セクション・Divisionを抽出
@@ -240,6 +251,13 @@ export class SymbolIndex {
         }
         
         this.symbols.set(uri, symbols);
+        
+        // Log indexing summary
+        const fileName = uri.substring(uri.lastIndexOf('/') + 1);
+        const variableCount = symbols.filter(s => s.type === 'variable').length;
+        const paragraphCount = symbols.filter(s => s.type === 'paragraph').length;
+        const sectionCount = symbols.filter(s => s.type === 'section').length;
+        this.log(`[SymbolIndex] Indexed ${fileName}: ${symbols.length} total symbols (${variableCount} variables, ${paragraphCount} paragraphs, ${sectionCount} sections)`);
     }
     
     /**
@@ -280,6 +298,8 @@ export class SymbolIndex {
         }
         
         const references = this.copybookReferences.get(documentUri)!;
+        const docFileName = documentUri.substring(documentUri.lastIndexOf('/') + 1);
+        
         // 既に同じCOPYBOOKが登録されていない場合のみ追加
         if (!references.some(ref => ref.uri === copybookUri)) {
             references.push({
@@ -287,6 +307,13 @@ export class SymbolIndex {
                 uri: copybookUri,
                 referenceLine: referenceLine
             });
+            
+            // Log COPYBOOK registration
+            const copybookSymbols = this.symbols.get(copybookUri) || [];
+            const variableCount = copybookSymbols.filter(s => s.type === 'variable').length;
+            this.log(`[SymbolIndex] Registered COPYBOOK "${copybookName}" for ${docFileName} (line ${referenceLine + 1}): ${copybookSymbols.length} symbols (${variableCount} variables)`);
+        } else {
+            this.log(`[SymbolIndex] COPYBOOK "${copybookName}" already registered for ${docFileName}`);
         }
     }
     
@@ -332,6 +359,22 @@ export class SymbolIndex {
             }
         }
         
+        // Log search results if logging is enabled
+        if (results.length > 0) {
+            const docFileName = documentUri.substring(documentUri.lastIndexOf('/') + 1);
+            if (results.length === 1) {
+                const source = results[0].copybookUri 
+                    ? this.getCopybookName(results[0].copybookUri) || 'COPYBOOK'
+                    : docFileName;
+                this.log(`[SymbolIndex] Found symbol "${symbolName}" in ${source}`);
+            } else {
+                const sources = results.map(r => 
+                    r.copybookUri ? this.getCopybookName(r.copybookUri) || 'COPYBOOK' : docFileName
+                );
+                this.log(`[SymbolIndex] Found ${results.length} definitions of "${symbolName}" in: ${sources.join(', ')}`);
+            }
+        }
+        
         return results;
     }
     
@@ -355,6 +398,43 @@ export class SymbolIndex {
             return basename;
         } catch {
             return null;
+        }
+    }
+    
+    /**
+     * COPYBOOK参照テーブルの状態をログ出力する
+     * @param documentUri ドキュメントURI（指定された場合はそのドキュメントのみ、未指定の場合は全て）
+     */
+    logCopybookTableStatus(documentUri?: string): void {
+        if (documentUri) {
+            // 特定のドキュメントの状態をログ出力
+            const docFileName = documentUri.substring(documentUri.lastIndexOf('/') + 1);
+            const references = this.copybookReferences.get(documentUri) || [];
+            
+            if (references.length === 0) {
+                this.log(`[SymbolIndex] COPYBOOK Table for ${docFileName}: No COPYBOOKs registered`);
+            } else {
+                this.log(`[SymbolIndex] COPYBOOK Table for ${docFileName}: ${references.length} COPYBOOK(s) registered`);
+                references.forEach((ref, idx) => {
+                    const symbols = this.symbols.get(ref.uri) || [];
+                    const variableCount = symbols.filter(s => s.type === 'variable').length;
+                    this.log(`[SymbolIndex]   ${idx + 1}. "${ref.name}" (line ${ref.referenceLine + 1}): ${symbols.length} symbols (${variableCount} variables)`);
+                });
+            }
+        } else {
+            // 全ドキュメントの状態をログ出力
+            const totalDocs = this.copybookReferences.size;
+            let totalCopybooks = 0;
+            
+            this.log(`[SymbolIndex] COPYBOOK Table Status: ${totalDocs} document(s) tracked`);
+            
+            this.copybookReferences.forEach((references, uri) => {
+                totalCopybooks += references.length;
+                const docFileName = uri.substring(uri.lastIndexOf('/') + 1);
+                this.log(`[SymbolIndex]   ${docFileName}: ${references.length} COPYBOOK(s)`);
+            });
+            
+            this.log(`[SymbolIndex] Total: ${totalCopybooks} COPYBOOK reference(s) across ${totalDocs} document(s)`);
         }
     }
 }
