@@ -131,6 +131,9 @@ code --install-extension <package-name>-<version>.vsix
 ## 設定
 VS Code の設定（settings.json）で以下をカスタマイズできます：
 
+### Language Server設定（サーバーサイド）
+以下の設定は Language Server で使用され、COPYBOOKの解決やプログラム検索に影響します：
+
 - **cobol.copybookPaths**: COPYBOOK検索パス（配列）
   - デフォルト: `["./copybooks", "./copy", "./COPY"]`
   - 例: `["./lib/copybooks", "./includes"]`
@@ -145,7 +148,8 @@ VS Code の設定（settings.json）で以下をカスタマイズできます�
   
 - **cobol.fileExtensions**: COBOLファイルの拡張子（配列）
   - デフォルト: `[".cbl", ".cob", ".cobol", ".CBL", ".COB", ".COBOL"]`
-  
+
+### クライアント設定（エディタサイド）
 - **cobol.enableRulers**: COBOLファイルで7, 8, 12列目に縦線を表示（boolean）
   - デフォルト: `true`
 
@@ -163,6 +167,7 @@ VS Code の設定（settings.json）で以下をカスタマイズできます�
     ".cpy",
     ".copy",
     ""
-  ]
+  ],
+  "cobol.enableRulers": true
 }
 ```

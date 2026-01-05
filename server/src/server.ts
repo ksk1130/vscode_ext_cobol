@@ -1084,7 +1084,7 @@ function getCopybookCompletions(document: TextDocument): CompletionItem[] {
             
             for (const file of files) {
                 const ext = path.extname(file);
-                if (extensions.includes(ext) || ext === '') {
+                if (extensions.includes(ext) || (ext === '' && extensions.includes(''))) {
                     const basename = path.basename(file, ext);
                     
                     completions.push({
