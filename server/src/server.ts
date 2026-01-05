@@ -51,13 +51,6 @@ interface CobolSettings {
 const connection = createConnection(ProposedFeatures.all);
 const documents = new TextDocuments(TextDocument);
 
-let copybookResolver: CopybookResolver;
-let programResolver: ProgramResolver;
-let symbolIndex = new SymbolIndex();  // Initialize immediately to avoid undefined errors
-let workspaceRoot: string | null = null;
-let hasConfigurationCapability = false;
-let hasWorkspaceFolderCapability = false;
-
 // デフォルト設定
 const defaultSettings: CobolSettings = {
     copybookPaths: [],
@@ -67,6 +60,18 @@ const defaultSettings: CobolSettings = {
 };
 
 let globalSettings: CobolSettings = defaultSettings;
+
+// Initialize resolvers and index immediately at module level to avoid undefined errors
+// These will be reconfigured in updateConfiguration() with proper settings
+let copybookResolver = new CopybookResolver({
+    searchPaths: [],
+    extensions: defaultSettings.copybookExtensions
+}, (message: string) => connection.console.log(message));
+let programResolver = new ProgramResolver();
+let symbolIndex = new SymbolIndex();
+let workspaceRoot: string | null = null;
+let hasConfigurationCapability = false;
+let hasWorkspaceFolderCapability = false;
 
 /**
  * COPYBOOK パス設定を解決する
@@ -190,7 +195,7 @@ async function updateConfiguration() {
         }
     }
     
-    // 設定値に基づいてCopybookResolverを初期化/再初期化
+    // 設定値に基づいてCopybookResolverを再初期化
     const searchPaths = resolveConfiguredPaths(globalSettings.copybookPaths)
         .concat(process.env.COBOL_COPYPATH ? [process.env.COBOL_COPYPATH] : [])
         .filter(p => p);
@@ -198,13 +203,10 @@ async function updateConfiguration() {
     copybookResolver = new CopybookResolver({
         searchPaths: searchPaths,
         extensions: globalSettings.copybookExtensions
-    });
+    }, (message: string) => connection.console.log(message));
     
-    // ProgramResolverの初期化
-    if (!programResolver) {
-        programResolver = new ProgramResolver();
-    }
-    // Note: symbolIndex is now initialized at module level, no need to check here
+    // Note: programResolver and symbolIndex are now initialized at module level
+    // programResolver doesn't need reconfiguration as it has no settings-dependent behavior
     
     // ワークスペースインデックス作成
     if (workspaceRoot) {
