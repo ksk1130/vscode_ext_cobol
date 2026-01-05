@@ -69,10 +69,37 @@ const defaultSettings: CobolSettings = {
 let globalSettings: CobolSettings = defaultSettings;
 
 /**
+ * COPYBOOK パス設定を解決する
+ * @param copybookPaths 設定から取得したパス配列
+ * @param workspaceRoot ワークスペースのルートパス
+ * @returns 解決された絶対パス配列
+ */
+function resolveCopybookPaths(copybookPaths: string[], workspaceRoot: string | null): string[] {
+    const resolvedPaths = copybookPaths.map(p => {
+        if (path.isAbsolute(p)) {
+            // 絶対パスの場合はそのまま使用
+            return p;
+        } else if (workspaceRoot) {
+            // 相対パスの場合はworkspaceRootを基準に解決
+            return path.resolve(workspaceRoot, p);
+        } else {
+            return p;
+        }
+    }).filter(p => p);
+    
+    // 環境変数 COBOL_COPYPATH があれば追加
+    if (process.env.COBOL_COPYPATH) {
+        resolvedPaths.push(process.env.COBOL_COPYPATH);
+    }
+    
+    return resolvedPaths;
+}
+
+/**
  * LSP初期化時にワークスペース情報を受け取り、各種リゾルバーを構築する。
  * @param params クライアントから渡される初期化パラメータ
  */
-connection.onInitialize((params:  InitializeParams) => {
+connection.onInitialize(async (params:  InitializeParams) => {
     workspaceRoot = params.rootUri ?  URI.parse(params.rootUri).fsPath : null;
     
     // クライアントの機能を確認
@@ -242,7 +269,8 @@ connection.onDefinition((params: DefinitionParams): Definition | null => {
     const normalizedLine = contentLine.trim().toUpperCase();
     
     // 1. COPYBOOKの参照ジャンプ
-    if (normalizedLine.startsWith('COPY')) {
+    // Use regex to match COPY followed by whitespace to avoid matching COPYBOOK, COPY-FILE, etc.
+    if (/^COPY\s+/i.test(normalizedLine)) {
         return handleCopybookJump(document, contentLine);
     }
     
@@ -360,7 +388,8 @@ connection.onCompletion((params: CompletionParams): CompletionItem[] => {
     connection.console.log(`[Completion] Line: "${line}", Content: "${contentLine}", Trimmed: "${trimmedLine}", Position: ${params.position.line}:${params.position.character}`);
     
     // 1. COPY文の場合、COPYBOOKの補完候補を提供（最優先）
-    if (trimmedLine.startsWith('COPY')) {
+    // Use regex to match COPY followed by whitespace to avoid matching COPYBOOK, COPY-FILE, etc.
+    if (/^COPY\s+/i.test(trimmedLine)) {
         const copybookCompletions = getCopybookCompletions(document);
         completions.push(...copybookCompletions);
         return completions;
@@ -656,6 +685,58 @@ function createHoverForSymbol(symbol: any, documentUri: string): Hover {
 }
 
 /**
+ * COBOL文から複数行にわたるCOPY文を結合する。
+ * COPY文はピリオドで終わるまで継続する可能性がある。
+ * @param lines ドキュメントの全行
+ * @returns 結合されたCOPY文の配列（各要素は {statement: string, startLine: number}）
+ */
+function collectCopyStatements(lines: string[]): Array<{statement: string, startLine: number}> {
+    const copyStatements: Array<{statement: string, startLine: number}> = [];
+    let currentStatement = '';
+    let inCopyStatement = false;
+    let startLine = -1;
+    
+    for (let i = 0; i < lines.length; i++) {
+        const contentLine = stripSequenceArea(lines[i]);
+        const trimmedLine = contentLine.trim();
+        const normalizedLine = trimmedLine.toUpperCase();
+        
+        if (/^COPY\s+/i.test(normalizedLine)) {
+            // COPY文の開始
+            inCopyStatement = true;
+            startLine = i;
+            currentStatement = trimmedLine;
+            
+            // 同じ行でピリオドで終わっている場合
+            if (trimmedLine.endsWith('.')) {
+                copyStatements.push({statement: currentStatement, startLine});
+                currentStatement = '';
+                inCopyStatement = false;
+                startLine = -1;
+            }
+        } else if (inCopyStatement) {
+            // COPY文の継続
+            currentStatement += ' ' + trimmedLine;
+            
+            // ピリオドで終わっている場合
+            if (trimmedLine.endsWith('.')) {
+                copyStatements.push({statement: currentStatement, startLine});
+                currentStatement = '';
+                inCopyStatement = false;
+                startLine = -1;
+            }
+        }
+    }
+    
+    // ピリオドなしで終わった場合も追加（不完全な文）
+    if (inCopyStatement && currentStatement) {
+        copyStatements.push({statement: currentStatement, startLine});
+    }
+    
+    return copyStatements;
+}
+
+/**
  * COPY文の参照先コピーブックへジャンプする位置を解決する。
  * @param document 現在のドキュメント
  * @param line 現在行のテキスト
@@ -686,8 +767,9 @@ function handleCopybookJump(document: TextDocument, line: string): Definition | 
  */
 function handlePerformJump(document: TextDocument, line: string): Definition | null {
     // PERFORM の後ろの単語を抽出
-    // 日本語を含むUnicode文字をサポート: [\w\u0080-\uFFFF\-]+
-    const paragraphMatch = line.match(/PERFORM\s+([\w\u0080-\uFFFF\-]+)/i);
+    // 日本語を含むUnicode文字をサポート: [\w\u0080-\uFFFF\-ー－]+
+    // \- = ASCII hyphen (U+002D), ー = katakana prolonged sound mark (U+30FC), － = full-width minus (U+FF0D)
+    const paragraphMatch = line.match(/PERFORM\s+([\w\u0080-\uFFFF\-ー－]+)/i);
     if (!paragraphMatch) return null;
     
     const paragraphName = paragraphMatch[1];
@@ -772,40 +854,96 @@ function searchInCopybooksWithPath(document: TextDocument, word: string): { symb
     const lines = text.split('\n');
     const sourceFileDir = path.dirname(URI.parse(document.uri).fsPath);
     
-    // コピーブックは既にロード済みと想定
-    for (const line of lines) {
-        const contentLine = stripSequenceArea(line);
-        const normalizedLine = contentLine.trim().toUpperCase();
+    connection.console.log(`[DEBUG-PREFIX] searchInCopybooksWithPath() called with word: "${word}"`);
+    
+    // 複数行にわたるCOPY文を結合
+    const copyStatements = collectCopyStatements(lines);
+    connection.console.log(`[DEBUG-PREFIX] Found ${copyStatements.length} COPY statements`);
+    
+    for (const {statement: contentLine} of copyStatements) {
+        connection.console.log(`[DEBUG-PREFIX] Processing COPY statement: "${contentLine.substring(0, 100)}..."`);
         
-        if (normalizedLine.startsWith('COPY')) {
-            // COPY 文から COPYBOOK 名と REPLACING ルールを抽出
-            const copybookInfo = copybookResolver.extractCopybookInfo(contentLine);
-            if (!copybookInfo.name) continue;
+        // COPY 文から COPYBOOK 名と REPLACING ルールを抽出
+        const copybookInfo = copybookResolver.extractCopybookInfo(contentLine);
+        if (!copybookInfo.name) {
+            connection.console.log(`[DEBUG-PREFIX] No copybook name found, skipping`);
+            continue;
+        }
+        
+        connection.console.log(`[DEBUG-PREFIX] Copybook name: "${copybookInfo.name}"`);
+        connection.console.log(`[DEBUG-PREFIX] Replacing rules: ${JSON.stringify(copybookInfo.replacing)}`);
+        
+        const copybookPath = copybookResolver.resolveCopybook(copybookInfo.name, sourceFileDir);
+        if (!copybookPath) {
+            connection.console.log(`[DEBUG-PREFIX] Copybook path not resolved, skipping`);
+            continue;
+        }
+        
+        connection.console.log(`[DEBUG-PREFIX] Copybook path: "${copybookPath}"`);
+        
+        // コピーブックのドキュメントを取得して記号を検索
+        const copybookUri = URI.file(copybookPath).toString();
+        
+        // REPLACING が適用された記号名で検索
+        let searchWord = word;
+        if (copybookInfo.replacing.length > 0) {
+            connection.console.log(`[DEBUG-PREFIX] Applying reverse transformation...`);
+            connection.console.log(`[DEBUG-PREFIX] Original word: "${searchWord}"`);
             
-            const copybookPath = copybookResolver.resolveCopybook(copybookInfo.name, sourceFileDir);
-            if (!copybookPath) continue;
-            
-            // コピーブックのドキュメントを取得して記号を検索
-            const copybookUri = URI.file(copybookPath).toString();
-            
-            // REPLACING が適用された記号名で検索
-            let searchWord = word;
-            if (copybookInfo.replacing.length > 0) {
-                // 逆変換：現在のコード内の名前 → COPYBOOK 内の元の名前
-                for (const rule of copybookInfo.replacing) {
-                    const regex = new RegExp(`\\b${rule.to}\\b`, 'gi');
+            // 逆変換：現在のコード内の名前 → COPYBOOK 内の元の名前
+            for (const rule of copybookInfo.replacing) {
+                const beforeTransform = searchWord;
+                
+                if (rule.isPrefix) {
+                    // 接頭辞置換の逆変換
+                    // 例: FUGA-変数 → HOGE-変数, FUGAー変数 → HOGEー変数
+                    const escapedTo = rule.to.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    // - (U+002D): ASCII hyphen
+                    // ー (U+30FC): Full-width katakana prolonged sound mark (Shift-JIS 817C)
+                    const regex = new RegExp(`^${escapedTo}([-ー－][\w\u0080-\uFFFF\-ー－]+)$`, 'i');
+                    connection.console.log(`[DEBUG-PREFIX] PREFIX rule: from="${rule.from}" to="${rule.to}"`);
+                    connection.console.log(`[DEBUG-PREFIX] PREFIX regex pattern: ${regex.source}`);
+                    connection.console.log(`[DEBUG-PREFIX] Testing regex against: "${searchWord}"`);
+                    
+                    const match = searchWord.match(regex);
+                    if (match) {
+                        connection.console.log(`[DEBUG-PREFIX] Regex matched! Groups: ${JSON.stringify(match)}`);
+                    } else {
+                        connection.console.log(`[DEBUG-PREFIX] Regex did NOT match`);
+                    }
+                    
+                    searchWord = searchWord.replace(regex, `${rule.from}$1`);
+                } else {
+                    // 通常の単語置換の逆変換
+                    const escapedTo = rule.to.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    const regex = new RegExp(`^${escapedTo}$`, 'i');
+                    connection.console.log(`[DEBUG-PREFIX] WORD rule: from="${rule.from}" to="${rule.to}"`);
+                    connection.console.log(`[DEBUG-PREFIX] WORD regex pattern: ${regex.source}`);
                     searchWord = searchWord.replace(regex, rule.from);
+                }
+                
+                if (beforeTransform !== searchWord) {
+                    connection.console.log(`[DEBUG-PREFIX] Transformed: "${beforeTransform}" → "${searchWord}"`);
+                } else {
+                    connection.console.log(`[DEBUG-PREFIX] No transformation applied (word unchanged)`);
                 }
             }
             
-            const copybookSymbol = symbolIndex.findSymbol(copybookUri, searchWord);
-            
-            if (copybookSymbol) {
-                return { symbol: copybookSymbol, copybookPath };
-            }
+            connection.console.log(`[DEBUG-PREFIX] Final search word after all transformations: "${searchWord}"`);
+        }
+        
+        connection.console.log(`[DEBUG-PREFIX] Searching for symbol "${searchWord}" in copybook "${copybookUri}"`);
+        const copybookSymbol = symbolIndex.findSymbol(copybookUri, searchWord);
+        
+        if (copybookSymbol) {
+            connection.console.log(`[DEBUG-PREFIX] ✓ Symbol found! line=${copybookSymbol.line}, col=${copybookSymbol.column}`);
+            return { symbol: copybookSymbol, copybookPath };
+        } else {
+            connection.console.log(`[DEBUG-PREFIX] ✗ Symbol NOT found in this copybook`);
         }
     }
     
+    connection.console.log(`[DEBUG-PREFIX] Symbol "${word}" not found in any copybook`);
     return null;
 }
 
@@ -820,43 +958,99 @@ function searchInCopybooks(document: TextDocument, word: string): Definition | n
     const lines = text.split('\n');
     const sourceFileDir = path.dirname(URI.parse(document.uri).fsPath);
     
-    // コピーブックは既にロード済みと想定
-    for (const line of lines) {
-        const contentLine = stripSequenceArea(line);
-        const normalizedLine = contentLine.trim().toUpperCase();
+    connection.console.log(`[DEBUG-PREFIX] searchInCopybooks() called with word: "${word}"`);
+    
+    // 複数行にわたるCOPY文を結合
+    const copyStatements = collectCopyStatements(lines);
+    connection.console.log(`[DEBUG-PREFIX] Found ${copyStatements.length} COPY statements`);
+    
+    for (const {statement: contentLine} of copyStatements) {
+        connection.console.log(`[DEBUG-PREFIX] Processing COPY statement: "${contentLine.substring(0, 100)}..."`);
         
-        if (normalizedLine.startsWith('COPY')) {
-            // COPY 文から COPYBOOK 名と REPLACING ルールを抽出
-            const copybookInfo = copybookResolver.extractCopybookInfo(contentLine);
-            if (!copybookInfo.name) continue;
+        // COPY 文から COPYBOOK 名と REPLACING ルールを抽出
+        const copybookInfo = copybookResolver.extractCopybookInfo(contentLine);
+        if (!copybookInfo.name) {
+            connection.console.log(`[DEBUG-PREFIX] No copybook name found, skipping`);
+            continue;
+        }
+        
+        connection.console.log(`[DEBUG-PREFIX] Copybook name: "${copybookInfo.name}"`);
+        connection.console.log(`[DEBUG-PREFIX] Replacing rules: ${JSON.stringify(copybookInfo.replacing)}`);
+        
+        const copybookPath = copybookResolver.resolveCopybook(copybookInfo.name, sourceFileDir);
+        if (!copybookPath) {
+            connection.console.log(`[DEBUG-PREFIX] Copybook path not resolved, skipping`);
+            continue;
+        }
+        
+        connection.console.log(`[DEBUG-PREFIX] Copybook path: "${copybookPath}"`);
+        
+        // コピーブックのドキュメントを取得して記号を検索
+        const copybookUri = URI.file(copybookPath).toString();
+        
+        // REPLACING が適用された記号名で検索
+        let searchWord = word;
+        if (copybookInfo.replacing.length > 0) {
+            connection.console.log(`[DEBUG-PREFIX] Applying reverse transformation...`);
+            connection.console.log(`[DEBUG-PREFIX] Original word: "${searchWord}"`);
             
-            const copybookPath = copybookResolver.resolveCopybook(copybookInfo.name, sourceFileDir);
-            if (!copybookPath) continue;
-            
-            // コピーブックのドキュメントを取得して記号を検索
-            const copybookUri = URI.file(copybookPath).toString();
-            
-            // REPLACING が適用された記号名で検索
-            let searchWord = word;
-            if (copybookInfo.replacing.length > 0) {
-                // 逆変換：現在のコード内の名前 → COPYBOOK 内の元の名前
-                for (const rule of copybookInfo.replacing) {
-                    const regex = new RegExp(`\\b${rule.to}\\b`, 'gi');
+            // 逆変換：現在のコード内の名前 → COPYBOOK 内の元の名前
+            for (const rule of copybookInfo.replacing) {
+                const beforeTransform = searchWord;
+                
+                if (rule.isPrefix) {
+                    // 接頭辞置換の逆変換
+                    // 例: FUGA-変数 → HOGE-変数, FUGAー変数 → HOGEー変数
+                    const escapedTo = rule.to.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    // - (U+002D): ASCII hyphen
+                    // ー (U+30FC): Full-width katakana prolonged sound mark (Shift-JIS 817C)
+                    const regex = new RegExp(`^${escapedTo}([-ー－][\w\u0080-\uFFFF\-ー－]+)$`, 'i');
+                    connection.console.log(`[DEBUG-PREFIX] PREFIX rule: from="${rule.from}" to="${rule.to}"`);
+                    connection.console.log(`[DEBUG-PREFIX] PREFIX regex pattern: ${regex.source}`);
+                    connection.console.log(`[DEBUG-PREFIX] Testing regex against: "${searchWord}"`);
+                    
+                    const match = searchWord.match(regex);
+                    if (match) {
+                        connection.console.log(`[DEBUG-PREFIX] Regex matched! Groups: ${JSON.stringify(match)}`);
+                    } else {
+                        connection.console.log(`[DEBUG-PREFIX] Regex did NOT match`);
+                    }
+                    
+                    searchWord = searchWord.replace(regex, `${rule.from}$1`);
+                } else {
+                    // 通常の単語置換の逆変換
+                    const escapedTo = rule.to.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    const regex = new RegExp(`^${escapedTo}$`, 'i');
+                    connection.console.log(`[DEBUG-PREFIX] WORD rule: from="${rule.from}" to="${rule.to}"`);
+                    connection.console.log(`[DEBUG-PREFIX] WORD regex pattern: ${regex.source}`);
                     searchWord = searchWord.replace(regex, rule.from);
+                }
+                
+                if (beforeTransform !== searchWord) {
+                    connection.console.log(`[DEBUG-PREFIX] Transformed: "${beforeTransform}" → "${searchWord}"`);
+                } else {
+                    connection.console.log(`[DEBUG-PREFIX] No transformation applied (word unchanged)`);
                 }
             }
             
-            const copybookSymbol = symbolIndex.findSymbol(copybookUri, searchWord);
-            
-            if (copybookSymbol) {
-                return Location.create(
-                    copybookUri,
-                    Range.create(copybookSymbol.line, copybookSymbol.column, copybookSymbol.line, copybookSymbol.column + searchWord.length)
-                );
-            }
+            connection.console.log(`[DEBUG-PREFIX] Final search word after all transformations: "${searchWord}"`);
+        }
+        
+        connection.console.log(`[DEBUG-PREFIX] Searching for symbol "${searchWord}" in copybook "${copybookUri}"`);
+        const copybookSymbol = symbolIndex.findSymbol(copybookUri, searchWord);
+        
+        if (copybookSymbol) {
+            connection.console.log(`[DEBUG-PREFIX] ✓ Symbol found! line=${copybookSymbol.line}, col=${copybookSymbol.column}`);
+            return Location.create(
+                copybookUri,
+                Range.create(copybookSymbol.line, copybookSymbol.column, copybookSymbol.line, copybookSymbol.column + searchWord.length)
+            );
+        } else {
+            connection.console.log(`[DEBUG-PREFIX] ✗ Symbol NOT found in this copybook`);
         }
     }
     
+    connection.console.log(`[DEBUG-PREFIX] Symbol "${word}" not found in any copybook`);
     return null;
 }
 
@@ -872,8 +1066,8 @@ function getWordAtPosition(document: TextDocument, position: Position): string |
         end: { line: position.line, character: 1000 }
     });
     
-    // 日本語を含むUnicode文字をサポート: [\w\u0080-\uFFFF\-]+
-    const words = line.match(/[\w\u0080-\uFFFF\-]+/gi);
+    // 日本語を含むUnicode文字をサポート: [\w\u0080-\uFFFF\-ー－]+
+    const words = line.match(/[\w\u0080-\uFFFF\-ー－]+/gi);
     if (!words) return null;
     
     let currentPos = 0;
@@ -993,7 +1187,8 @@ function getVariableCompletions(document: TextDocument): CompletionItem[] {
         const contentLine = stripSequenceArea(line);
         const normalizedLine = contentLine.trim().toUpperCase();
         
-        if (normalizedLine.startsWith('COPY')) {
+        // Use regex to match COPY followed by whitespace to avoid matching COPYBOOK, COPY-FILE, etc.
+        if (/^COPY\s+/i.test(normalizedLine)) {
             const copybookInfo = copybookResolver.extractCopybookInfo(contentLine);
             if (!copybookInfo.name) continue;
             
@@ -1318,7 +1513,8 @@ function validateDocument(document: TextDocument): void {
             const contentLine = stripSequenceArea(line);
             const normalizedLine = contentLine.trim().toUpperCase();
             
-            if (normalizedLine.startsWith('COPY')) {
+            // Use regex to match COPY followed by whitespace to avoid matching COPYBOOK, COPY-FILE, etc.
+            if (/^COPY\s+/i.test(normalizedLine)) {
                 const copybookName = copybookResolver.extractCopybookName(contentLine);
                 if (copybookName) {
                     const sourceFileDir = path.dirname(URI.parse(document.uri).fsPath);
@@ -1357,8 +1553,8 @@ function validateDocument(document: TextDocument): void {
         // MOVE文の型・サイズチェック
         if (normalizedLine.includes('MOVE') && normalizedLine.includes('TO')) {
             // 修飾名（RECORD.FIELD）と単純名の両方をサポートし、末尾のピリオドは除外
-            // 日本語を含むUnicode文字をサポート: [\w\u0080-\uFFFF\-]+
-            const moveMatch = contentLine.match(/MOVE\s+([\w\u0080-\uFFFF\-]+(?:\.[\w\u0080-\uFFFF\-]+)*)\s+TO\s+([\w\u0080-\uFFFF\-]+(?:\.[\w\u0080-\uFFFF\-]+)*)/i);
+            // 日本語を含むUnicode文字をサポート: [\w\u0080-\uFFFF\-ー－]+
+            const moveMatch = contentLine.match(/MOVE\s+([\w\u0080-\uFFFF\-ー－]+(?:\.[\w\u0080-\uFFFF\-ー－]+)*)\s+TO\s+([\w\u0080-\uFFFF\-ー－]+(?:\.[\w\u0080-\uFFFF\-ー－]+)*)/i);
             if (moveMatch) {
                 const sourceName = moveMatch[1];
                 const targetName = moveMatch[2];
@@ -1421,8 +1617,9 @@ function validateDocument(document: TextDocument): void {
         }
         
         // MOVE, ADD, COMPUTE, IF, EVALUATE などで使用される変数を抽出
-        // 日本語を含むUnicode文字をサポート: [\w\u0080-\uFFFF\-]+
-        const words = contentLine.match(/\b[\w\u0080-\uFFFF\-]+\b/gi);
+        // 日本語を含むUnicode文字をサポート: [\w\u0080-\uFFFF\-ー－]+
+        // 注: \b（単語境界）はUnicode文字で正しく動作しないため使用しない
+        const words = contentLine.match(/[\w\u0080-\uFFFF\-ー－]+/gi);
         if (!words) continue;
         
         for (const word of words) {
@@ -1529,36 +1726,34 @@ function loadCopybooksFromDocument(document: TextDocument): void {
     
     const fs = require('fs');
     
-    for (const line of lines) {
-        const contentLine = stripSequenceArea(line);
-        const normalizedLine = contentLine.trim().toUpperCase();
+    // 複数行にわたるCOPY文を結合
+    const copyStatements = collectCopyStatements(lines);
+    
+    for (const {statement: contentLine} of copyStatements) {
+        // COPY 文から COPYBOOK 名と REPLACING ルールを抽出
+        const copybookInfo = copybookResolver.extractCopybookInfo(contentLine);
+        if (!copybookInfo.name) continue;
         
-        if (normalizedLine.startsWith('COPY')) {
-            // COPY 文から COPYBOOK 名と REPLACING ルールを抽出
-            const copybookInfo = copybookResolver.extractCopybookInfo(contentLine);
-            if (!copybookInfo.name) continue;
+        const copybookPath = copybookResolver.resolveCopybook(copybookInfo.name, sourceFileDir);
+        if (!copybookPath || !fs.existsSync(copybookPath)) continue;
+        
+        try {
+            let copybookContent = fs.readFileSync(copybookPath, 'utf-8');
             
-            const copybookPath = copybookResolver.resolveCopybook(copybookInfo.name, sourceFileDir);
-            if (!copybookPath || !fs.existsSync(copybookPath)) continue;
-            
-            try {
-                let copybookContent = fs.readFileSync(copybookPath, 'utf-8');
-                
-                // REPLACING ルールを適用
-                if (copybookInfo.replacing.length > 0) {
-                    copybookContent = copybookResolver.applyReplacingRules(copybookContent, copybookInfo.replacing);
-                }
-                
-                const copybookDoc = TextDocument.create(
-                    URI.file(copybookPath).toString(),
-                    'cobol',
-                    1,
-                    copybookContent
-                );
-                symbolIndex.indexDocument(copybookDoc);
-            } catch (err) {
-                // エラーは無視
+            // REPLACING ルールを適用
+            if (copybookInfo.replacing.length > 0) {
+                copybookContent = copybookResolver.applyReplacingRules(copybookContent, copybookInfo.replacing);
             }
+            
+            const copybookDoc = TextDocument.create(
+                URI.file(copybookPath).toString(),
+                'cobol',
+                1,
+                copybookContent
+            );
+            symbolIndex.indexDocument(copybookDoc);
+        } catch (err) {
+            // エラーは無視
         }
     }
 }
