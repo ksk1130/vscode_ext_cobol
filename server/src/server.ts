@@ -829,9 +829,11 @@ function searchInCopybooksWithPath(document: TextDocument, word: string): { symb
             for (const rule of copybookInfo.replacing) {
                 if (rule.isPrefix) {
                     // 接頭辞置換の逆変換
-                    // 例: FUGA-変数 → HOGE-変数
+                    // 例: FUGA-変数 → HOGE-変数, FUGAー変数 → HOGEー変数
                     const escapedTo = rule.to.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                    const regex = new RegExp(`^${escapedTo}(-[\w\u0080-\uFFFF\-]+)$`, 'i');
+                    // - (U+002D): ASCII hyphen
+                    // ー (U+30FC): Full-width katakana prolonged sound mark (Shift-JIS 817C)
+                    const regex = new RegExp(`^${escapedTo}([-ー][\w\u0080-\uFFFF\-ー]+)$`, 'i');
                     searchWord = searchWord.replace(regex, `${rule.from}$1`);
                 } else {
                     // 通常の単語置換の逆変換
@@ -884,9 +886,11 @@ function searchInCopybooks(document: TextDocument, word: string): Definition | n
             for (const rule of copybookInfo.replacing) {
                 if (rule.isPrefix) {
                     // 接頭辞置換の逆変換
-                    // 例: FUGA-変数 → HOGE-変数
+                    // 例: FUGA-変数 → HOGE-変数, FUGAー変数 → HOGEー変数
                     const escapedTo = rule.to.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                    const regex = new RegExp(`^${escapedTo}(-[\w\u0080-\uFFFF\-]+)$`, 'i');
+                    // - (U+002D): ASCII hyphen
+                    // ー (U+30FC): Full-width katakana prolonged sound mark (Shift-JIS 817C)
+                    const regex = new RegExp(`^${escapedTo}([-ー][\w\u0080-\uFFFF\-ー]+)$`, 'i');
                     searchWord = searchWord.replace(regex, `${rule.from}$1`);
                 } else {
                     // 通常の単語置換の逆変換

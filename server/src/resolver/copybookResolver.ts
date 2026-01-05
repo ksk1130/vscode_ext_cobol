@@ -147,10 +147,12 @@ export class CopybookResolver {
         for (const rule of rules) {
             if (rule.isPrefix) {
                 // 接頭辞置換（DISJOINING/JOINING AS PREFIX）
-                // 例: HOGE-変数 → FUGA-変数
+                // 例: HOGE-変数 → FUGA-変数, HOGEー変数 → FUGAー変数
                 const escapedFrom = rule.from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                // 行頭またはスペース・ピリオドの後に接頭辞があり、その後にハイフンが続くパターン
-                const regex = new RegExp(`(^|\\s|\\.)${escapedFrom}(-[\w\u0080-\uFFFF\-]+)`, 'gi');
+                // 行頭またはスペース・ピリオドの後に接頭辞があり、その後にハイフン(- or ー)が続くパターン
+                // - (U+002D): ASCII hyphen
+                // ー (U+30FC): Full-width katakana prolonged sound mark (Shift-JIS 817C)
+                const regex = new RegExp(`(^|\\s|\\.)${escapedFrom}([-ー][\\w\\u0080-\\uFFFF\\-ー]+)`, 'gi');
                 result = result.replace(regex, `$1${rule.to}$2`);
             } else {
                 // 通常の単語置換（REPLACING）

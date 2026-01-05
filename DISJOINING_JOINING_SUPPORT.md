@@ -222,16 +222,6 @@ if (rule.isPrefix) {
            05  旧プリフィックス-住所     PIC X(100).
 ```
 
-### 例3: 日本語変数名 / Example 3: Japanese Variable Names
-
-**COPYBOOK (データ定義.cpy):**
-```cobol
-       01  旧プリフィックス-レコード.
-           05  旧プリフィックス-ID       PIC 9(08).
-           05  旧プリフィックス-名前     PIC X(50).
-           05  旧プリフィックス-住所     PIC X(100).
-```
-
 **COBOL:**
 ```cobol
        COPY データ定義 
@@ -244,7 +234,31 @@ if (rule.isPrefix) {
            DISPLAY 新プリフィックス-名前.
 ```
 
-### 例4: REPLACINGとの組み合わせ / Example 4: Combined with REPLACING
+### 例4: 全角区切り文字 / Example 4: Full-Width Separator
+
+**COPYBOOK (MASTER.cpy):**
+```cobol
+       01  古ーレコード.
+           05  古ーID         PIC 9(08).
+           05  古ー名前       PIC X(50).
+           05  古ーデータ     PIC X(100).
+```
+
+**COBOL:**
+```cobol
+       COPY MASTER
+           DISJOINING 古
+           JOINING 新
+           AS PREFIX.
+       
+       PROCEDURE DIVISION.
+           *> 全角「ー」区切り文字にも対応
+           MOVE 12345678 TO 新ーID.
+           DISPLAY 新ー名前.
+           *> F12 キーで 新ーID から COPYBOOK の 古ーID へジャンプ
+```
+
+### 例5: REPLACINGとの組み合わせ / Example 5: Combined with REPLACING
 
 ```cobol
        COPY COPYBOOK
@@ -262,11 +276,16 @@ Both rules are applied:
 
 ## 制限事項 / Limitations
 
-1. **ハイフン必須 / Hyphen Required**:
-   - 接頭辞の後に必ずハイフン `-` が必要です
-   - The prefix must be followed by a hyphen `-`
-   - 例: `HOGE-変数` は対応、`HOGE変数` は非対応
-   - Example: `HOGE-変数` works, `HOGE変数` doesn't
+1. **区切り文字必須 / Separator Required**:
+   - 接頭辞の後に必ず区切り文字が必要です
+   - The prefix must be followed by a separator character
+   - サポートされる区切り文字 / Supported separators:
+     - `-` (U+002D): ASCII hyphen
+     - `ー` (U+30FC): Full-width katakana prolonged sound mark (Shift-JIS 817C)
+   - 例 / Examples:
+     - `HOGE-変数` ✓
+     - `HOGEー変数` ✓
+     - `HOGE変数` ✗ (no separator)
 
 2. **AS PREFIX のみ / AS PREFIX Only**:
    - 現在は `AS PREFIX` のみサポート
