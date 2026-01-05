@@ -23,8 +23,11 @@ export interface ReplacingRule {
  */
 export class CopybookResolver {
     private copybookCache: Map<string, string> = new Map();
+    private logCallback?: (message: string) => void;
     
-    constructor(private config: CopybookConfig) {}
+    constructor(private config: CopybookConfig, logCallback?: (message: string) => void) {
+        this.logCallback = logCallback;
+    }
     
     /**
      * COPY文からCOPYBOOK名とREPLACING/DISJOINING/JOINING句を抽出
@@ -211,5 +214,67 @@ export class CopybookResolver {
         // または環境変数から取得
         const envVar = process.env[`COBOL_LIB_${libraryName}`];
         return envVar || null;
+    }
+    
+    /**
+     * 設定された検索パス配下のCOPYBOOKファイルをスキャンしてログ出力
+     * copybookResolverの動作状況を確認するための診断機能
+     */
+    scanAndLogCopybookFiles(): void {
+        if (!this.logCallback) {
+            return;
+        }
+        
+        const log = this.logCallback; // ローカル変数に代入してTypeScriptの型チェックを通す
+        
+        log('[CopybookResolver] Scanning COPYBOOK files...');
+        log(`[CopybookResolver] Search paths: ${this.config.searchPaths.join(', ')}`);
+        log(`[CopybookResolver] Extensions: ${this.config.extensions.join(', ')}`);
+        
+        let totalFiles = 0;
+        
+        for (const searchPath of this.config.searchPaths) {
+            if (!searchPath || !fs.existsSync(searchPath)) {
+                log(`[CopybookResolver]   Path not found: ${searchPath}`);
+                continue;
+            }
+            
+            try {
+                const files = fs.readdirSync(searchPath);
+                const copybookFiles: string[] = [];
+                
+                for (const file of files) {
+                    const filePath = path.join(searchPath, file);
+                    
+                    // ディレクトリはスキップ
+                    if (!fs.statSync(filePath).isFile()) {
+                        continue;
+                    }
+                    
+                    // 拡張子チェック
+                    const ext = path.extname(file);
+                    if (this.config.extensions.includes(ext) || 
+                        (this.config.extensions.includes('') && ext === '')) {
+                        copybookFiles.push(file);
+                    }
+                }
+                
+                totalFiles += copybookFiles.length;
+                
+                if (copybookFiles.length > 0) {
+                    log(`[CopybookResolver]   Found ${copybookFiles.length} file(s) in ${searchPath}:`);
+                    copybookFiles.forEach(file => {
+                        log(`[CopybookResolver]     - ${file}`);
+                    });
+                } else {
+                    log(`[CopybookResolver]   No COPYBOOK files found in ${searchPath}`);
+                }
+            } catch (err) {
+                const errorMessage = err instanceof Error ? err.message : String(err);
+                log(`[CopybookResolver]   Error scanning ${searchPath}: ${errorMessage}`);
+            }
+        }
+        
+        log(`[CopybookResolver] Total COPYBOOK files found: ${totalFiles}`);
     }
 }

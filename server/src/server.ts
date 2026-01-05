@@ -61,7 +61,13 @@ connection.onInitialize((params:  InitializeParams) => {
             process.env.COBOL_COPYPATH || ''
         ].filter(p => p),
         extensions: ['.cpy', '.CPY', '.cbl', '.CBL', '']
+    }, (message: string) => {
+        // CopybookResolverからのログメッセージをクライアントに送信
+        connection.console.log(message);
     });
+    
+    // COPYBOOK ファイルのスキャンとログ出力
+    copybookResolver.scanAndLogCopybookFiles();
     
     programResolver = new ProgramResolver();
     symbolIndex = new SymbolIndex();
