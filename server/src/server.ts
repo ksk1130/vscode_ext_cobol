@@ -1408,7 +1408,8 @@ function validateDocument(document: TextDocument): void {
         
         // MOVE, ADD, COMPUTE, IF, EVALUATE などで使用される変数を抽出
         // 日本語を含むUnicode文字をサポート: [\w\u0080-\uFFFF\-]+
-        const words = contentLine.match(/\b[\w\u0080-\uFFFF\-]+\b/gi);
+        // 注: \b（単語境界）はUnicode文字で正しく動作しないため使用しない
+        const words = contentLine.match(/[\w\u0080-\uFFFF\-]+/gi);
         if (!words) continue;
         
         for (const word of words) {

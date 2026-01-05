@@ -142,8 +142,11 @@ export class CopybookResolver {
     applyReplacingRules(text: string, rules: ReplacingRule[]): string {
         let result = text;
         for (const rule of rules) {
-            // 大文字小文字を区別せず、単語境界を考慮して置換
-            const regex = new RegExp(`\\b${rule.from}\\b`, 'gi');
+            // 日本語を含むUnicode文字をサポートするため、\b（単語境界）の代わりに
+            // 前後がスペース、ハイフン、ピリオド、または文字列の始終であることを確認
+            // rule.fromに含まれる正規表現の特殊文字をエスケープ
+            const escapedFrom = rule.from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const regex = new RegExp(`(?<=^|\\s|-|\\.)${escapedFrom}(?=\\s|-|\\.|$)`, 'gi');
             result = result.replace(regex, rule.to);
         }
         return result;
