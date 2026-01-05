@@ -963,34 +963,34 @@ function searchInCopybooksWithPath(document: TextDocument, word: string): { symb
     const lines = text.split('\n');
     const sourceFileDir = path.dirname(URI.parse(document.uri).fsPath);
     
-    logger.debug(`[DEBUG-PREFIX] searchInCopybooksWithPath() called with word: "${word}"`);
+    logger.debug(`[Parse-COPYBOOK] searchInCopybooksWithPath() called with word: "${word}"`);
     
     // 複数行にわたるCOPY文を結合
     const copyStatements = collectCopyStatements(lines);
-    logger.debug(`[DEBUG-PREFIX] Found ${copyStatements.length} COPY statements`);
+    logger.debug(`[Parse-COPYBOOK] Found ${copyStatements.length} COPY statements`);
     
     const resolver = ensureCopybookResolver();
 
     for (const {statement: contentLine} of copyStatements) {
-        logger.debug(`[DEBUG-PREFIX] Processing COPY statement: "${contentLine.substring(0, 100)}..."`);
+        logger.debug(`[Parse-COPYBOOK] Processing COPY statement: "${contentLine.substring(0, 100)}..."`);
         
         // COPY 文から COPYBOOK 名と REPLACING ルールを抽出
         const copybookInfo = resolver.extractCopybookInfo(contentLine);
         if (!copybookInfo.name) {
-            logger.debug(`[DEBUG-PREFIX] No copybook name found, skipping`);
+            logger.debug(`[Parse-COPYBOOK] No copybook name found, skipping`);
             continue;
         }
         
-        logger.debug(`[DEBUG-PREFIX] Copybook name: "${copybookInfo.name}"`);
-        logger.debug(`[DEBUG-PREFIX] Replacing rules: ${JSON.stringify(copybookInfo.replacing)}`);
+        logger.debug(`[Parse-COPYBOOK] Copybook name: "${copybookInfo.name}"`);
+        logger.debug(`[Parse-COPYBOOK] Replacing rules: ${JSON.stringify(copybookInfo.replacing)}`);
         
         const copybookPath = resolver.resolveCopybook(copybookInfo.name, sourceFileDir);
         if (!copybookPath) {
-            logger.debug(`[DEBUG-PREFIX] Copybook path not resolved, skipping`);
+            logger.debug(`[Parse-COPYBOOK] Copybook path not resolved, skipping`);
             continue;
         }
         
-        logger.debug(`[DEBUG-PREFIX] Copybook path: "${copybookPath}"`);
+        logger.debug(`[Parse-COPYBOOK] Copybook path: "${copybookPath}"`);
         
         // コピーブックのドキュメントを取得して記号を検索
         const copybookUri = URI.file(copybookPath).toString();
@@ -998,8 +998,8 @@ function searchInCopybooksWithPath(document: TextDocument, word: string): { symb
         // REPLACING が適用された記号名で検索
         let searchWord = word;
         if (copybookInfo.replacing.length > 0) {
-            logger.debug(`[DEBUG-PREFIX] Applying reverse transformation...`);
-            logger.debug(`[DEBUG-PREFIX] Original word: "${searchWord}"`);
+            logger.debug(`[Parse-COPYBOOK] Applying reverse transformation...`);
+            logger.debug(`[Parse-COPYBOOK] Original word: "${searchWord}"`);
             
             // 逆変換：現在のコード内の名前 → COPYBOOK 内の元の名前
             for (const rule of copybookInfo.replacing) {
@@ -1012,15 +1012,15 @@ function searchInCopybooksWithPath(document: TextDocument, word: string): { symb
                     // - (U+002D): ASCII hyphen
                     // ー (U+30FC): Full-width katakana prolonged sound mark (Shift-JIS 817C)
                     const regex = new RegExp(`^${escapedTo}([-ー－][\w\u0080-\uFFFF\-ー－]+)$`, 'i');
-                    logger.debug(`[DEBUG-PREFIX] PREFIX rule: from="${rule.from}" to="${rule.to}"`);
-                    logger.debug(`[DEBUG-PREFIX] PREFIX regex pattern: ${regex.source}`);
-                    logger.debug(`[DEBUG-PREFIX] Testing regex against: "${searchWord}"`);
+                    logger.debug(`[Parse-COPYBOOK] PREFIX rule: from="${rule.from}" to="${rule.to}"`);
+                    logger.debug(`[Parse-COPYBOOK] PREFIX regex pattern: ${regex.source}`);
+                    logger.debug(`[Parse-COPYBOOK] Testing regex against: "${searchWord}"`);
                     
                     const match = searchWord.match(regex);
                     if (match) {
-                        logger.debug(`[DEBUG-PREFIX] Regex matched! Groups: ${JSON.stringify(match)}`);
+                        logger.debug(`[Parse-COPYBOOK] Regex matched! Groups: ${JSON.stringify(match)}`);
                     } else {
-                        logger.debug(`[DEBUG-PREFIX] Regex did NOT match`);
+                        logger.debug(`[Parse-COPYBOOK] Regex did NOT match`);
                     }
                     
                     searchWord = searchWord.replace(regex, `${rule.from}$1`);
@@ -1028,33 +1028,33 @@ function searchInCopybooksWithPath(document: TextDocument, word: string): { symb
                     // 通常の単語置換の逆変換
                     const escapedTo = rule.to.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
                     const regex = new RegExp(`^${escapedTo}$`, 'i');
-                    logger.debug(`[DEBUG-PREFIX] WORD rule: from="${rule.from}" to="${rule.to}"`);
-                    logger.debug(`[DEBUG-PREFIX] WORD regex pattern: ${regex.source}`);
+                    logger.debug(`[Parse-COPYBOOK] WORD rule: from="${rule.from}" to="${rule.to}"`);
+                    logger.debug(`[Parse-COPYBOOK] WORD regex pattern: ${regex.source}`);
                     searchWord = searchWord.replace(regex, rule.from);
                 }
                 
                 if (beforeTransform !== searchWord) {
-                    logger.debug(`[DEBUG-PREFIX] Transformed: "${beforeTransform}" → "${searchWord}"`);
+                    logger.debug(`[Parse-COPYBOOK] Transformed: "${beforeTransform}" → "${searchWord}"`);
                 } else {
-                    logger.debug(`[DEBUG-PREFIX] No transformation applied (word unchanged)`);
+                    logger.debug(`[Parse-COPYBOOK] No transformation applied (word unchanged)`);
                 }
             }
             
-            logger.debug(`[DEBUG-PREFIX] Final search word after all transformations: "${searchWord}"`);
+            logger.debug(`[Parse-COPYBOOK] Final search word after all transformations: "${searchWord}"`);
         }
         
-        logger.debug(`[DEBUG-PREFIX] Searching for symbol "${searchWord}" in copybook "${copybookUri}"`);
+        logger.debug(`[Parse-COPYBOOK] Searching for symbol "${searchWord}" in copybook "${copybookUri}"`);
         const copybookSymbol = symbolIndex.findSymbol(copybookUri, searchWord);
         
         if (copybookSymbol) {
-            logger.debug(`[DEBUG-PREFIX] ✓ Symbol found! line=${copybookSymbol.line}, col=${copybookSymbol.column}`);
+            logger.debug(`[Parse-COPYBOOK] ✓ Symbol found! line=${copybookSymbol.line}, col=${copybookSymbol.column}`);
             return { symbol: copybookSymbol, copybookPath };
         } else {
-            logger.debug(`[DEBUG-PREFIX] ✗ Symbol NOT found in this copybook`);
+            logger.debug(`[Parse-COPYBOOK] ✗ Symbol NOT found in this copybook`);
         }
     }
     
-    logger.debug(`[DEBUG-PREFIX] Symbol "${word}" not found in any copybook`);
+    logger.debug(`[Parse-COPYBOOK] Symbol "${word}" not found in any copybook`);
     return null;
 }
 
@@ -1071,32 +1071,32 @@ function searchInCopybooks(document: TextDocument, word: string): Definition | n
     
     const resolver = ensureCopybookResolver();
     
-    logger.debug(`[DEBUG-PREFIX] searchInCopybooks() called with word: "${word}"`);
+    logger.debug(`[Parse-COPYBOOK] searchInCopybooks() called with word: "${word}"`);
     
     // 複数行にわたるCOPY文を結合
     const copyStatements = collectCopyStatements(lines);
-    logger.debug(`[DEBUG-PREFIX] Found ${copyStatements.length} COPY statements`);
+    logger.debug(`[Parse-COPYBOOK] Found ${copyStatements.length} COPY statements`);
 
     for (const {statement: contentLine} of copyStatements) {
-        logger.debug(`[DEBUG-PREFIX] Processing COPY statement: "${contentLine.substring(0, 100)}..."`);
+        logger.debug(`[Parse-COPYBOOK] Processing COPY statement: "${contentLine.substring(0, 100)}..."`);
         
         // COPY 文から COPYBOOK 名と REPLACING ルールを抽出
         const copybookInfo = resolver.extractCopybookInfo(contentLine);
         if (!copybookInfo.name) {
-            logger.debug(`[DEBUG-PREFIX] No copybook name found, skipping`);
+            logger.debug(`[Parse-COPYBOOK] No copybook name found, skipping`);
             continue;
         }
         
-        logger.debug(`[DEBUG-PREFIX] Copybook name: "${copybookInfo.name}"`);
-        logger.debug(`[DEBUG-PREFIX] Replacing rules: ${JSON.stringify(copybookInfo.replacing)}`);
+        logger.debug(`[Parse-COPYBOOK] Copybook name: "${copybookInfo.name}"`);
+        logger.debug(`[Parse-COPYBOOK] Replacing rules: ${JSON.stringify(copybookInfo.replacing)}`);
         
         const copybookPath = resolver.resolveCopybook(copybookInfo.name, sourceFileDir);
         if (!copybookPath) {
-            logger.debug(`[DEBUG-PREFIX] Copybook path not resolved, skipping`);
+            logger.debug(`[Parse-COPYBOOK] Copybook path not resolved, skipping`);
             continue;
         }
         
-        logger.debug(`[DEBUG-PREFIX] Copybook path: "${copybookPath}"`);
+        logger.debug(`[Parse-COPYBOOK] Copybook path: "${copybookPath}"`);
         
         // コピーブックのドキュメントを取得して記号を検索
         const copybookUri = URI.file(copybookPath).toString();
@@ -1104,8 +1104,8 @@ function searchInCopybooks(document: TextDocument, word: string): Definition | n
         // REPLACING が適用された記号名で検索
         let searchWord = word;
         if (copybookInfo.replacing.length > 0) {
-            logger.debug(`[DEBUG-PREFIX] Applying reverse transformation...`);
-            logger.debug(`[DEBUG-PREFIX] Original word: "${searchWord}"`);
+            logger.debug(`[Parse-COPYBOOK] Applying reverse transformation...`);
+            logger.debug(`[Parse-COPYBOOK] Original word: "${searchWord}"`);
             
             // 逆変換：現在のコード内の名前 → COPYBOOK 内の元の名前
             for (const rule of copybookInfo.replacing) {
@@ -1118,15 +1118,15 @@ function searchInCopybooks(document: TextDocument, word: string): Definition | n
                     // - (U+002D): ASCII hyphen
                     // ー (U+30FC): Full-width katakana prolonged sound mark (Shift-JIS 817C)
                     const regex = new RegExp(`^${escapedTo}([-ー－][\w\u0080-\uFFFF\-ー－]+)$`, 'i');
-                    logger.debug(`[DEBUG-PREFIX] PREFIX rule: from="${rule.from}" to="${rule.to}"`);
-                    logger.debug(`[DEBUG-PREFIX] PREFIX regex pattern: ${regex.source}`);
-                    logger.debug(`[DEBUG-PREFIX] Testing regex against: "${searchWord}"`);
+                    logger.debug(`[Parse-COPYBOOK] PREFIX rule: from="${rule.from}" to="${rule.to}"`);
+                    logger.debug(`[Parse-COPYBOOK] PREFIX regex pattern: ${regex.source}`);
+                    logger.debug(`[Parse-COPYBOOK] Testing regex against: "${searchWord}"`);
                     
                     const match = searchWord.match(regex);
                     if (match) {
-                        logger.debug(`[DEBUG-PREFIX] Regex matched! Groups: ${JSON.stringify(match)}`);
+                        logger.debug(`[Parse-COPYBOOK] Regex matched! Groups: ${JSON.stringify(match)}`);
                     } else {
-                        logger.debug(`[DEBUG-PREFIX] Regex did NOT match`);
+                        logger.debug(`[Parse-COPYBOOK] Regex did NOT match`);
                     }
                     
                     searchWord = searchWord.replace(regex, `${rule.from}$1`);
@@ -1134,36 +1134,36 @@ function searchInCopybooks(document: TextDocument, word: string): Definition | n
                     // 通常の単語置換の逆変換
                     const escapedTo = rule.to.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
                     const regex = new RegExp(`^${escapedTo}$`, 'i');
-                    logger.debug(`[DEBUG-PREFIX] WORD rule: from="${rule.from}" to="${rule.to}"`);
-                    logger.debug(`[DEBUG-PREFIX] WORD regex pattern: ${regex.source}`);
+                    logger.debug(`[Parse-COPYBOOK] WORD rule: from="${rule.from}" to="${rule.to}"`);
+                    logger.debug(`[Parse-COPYBOOK] WORD regex pattern: ${regex.source}`);
                     searchWord = searchWord.replace(regex, rule.from);
                 }
                 
                 if (beforeTransform !== searchWord) {
-                    logger.debug(`[DEBUG-PREFIX] Transformed: "${beforeTransform}" → "${searchWord}"`);
+                    logger.debug(`[Parse-COPYBOOK] Transformed: "${beforeTransform}" → "${searchWord}"`);
                 } else {
-                    logger.debug(`[DEBUG-PREFIX] No transformation applied (word unchanged)`);
+                    logger.debug(`[Parse-COPYBOOK] No transformation applied (word unchanged)`);
                 }
             }
             
-            logger.debug(`[DEBUG-PREFIX] Final search word after all transformations: "${searchWord}"`);
+            logger.debug(`[Parse-COPYBOOK] Final search word after all transformations: "${searchWord}"`);
         }
         
-        logger.debug(`[DEBUG-PREFIX] Searching for symbol "${searchWord}" in copybook "${copybookUri}"`);
+        logger.debug(`[Parse-COPYBOOK] Searching for symbol "${searchWord}" in copybook "${copybookUri}"`);
         const copybookSymbol = symbolIndex.findSymbol(copybookUri, searchWord);
         
         if (copybookSymbol) {
-            logger.debug(`[DEBUG-PREFIX] ✓ Symbol found! line=${copybookSymbol.line}, col=${copybookSymbol.column}`);
+            logger.debug(`[Parse-COPYBOOK] ✓ Symbol found! line=${copybookSymbol.line}, col=${copybookSymbol.column}`);
             return Location.create(
                 copybookUri,
                 Range.create(copybookSymbol.line, copybookSymbol.column, copybookSymbol.line, copybookSymbol.column + searchWord.length)
             );
         } else {
-            logger.debug(`[DEBUG-PREFIX] ✗ Symbol NOT found in this copybook`);
+            logger.debug(`[Parse-COPYBOOK] ✗ Symbol NOT found in this copybook`);
         }
     }
     
-    logger.debug(`[DEBUG-PREFIX] Symbol "${word}" not found in any copybook`);
+    logger.debug(`[Parse-COPYBOOK] Symbol "${word}" not found in any copybook`);
     return null;
 }
 
