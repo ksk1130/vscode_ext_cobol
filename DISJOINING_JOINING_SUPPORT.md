@@ -258,7 +258,41 @@ if (rule.isPrefix) {
            *> F12 キーで 新ーID から COPYBOOK の 古ーID へジャンプ
 ```
 
-### 例5: REPLACINGとの組み合わせ / Example 5: Combined with REPLACING
+### 例5: ハイフンを含む接頭辞名 / Example 5: Hyphenated Prefix Names
+
+**COPYBOOK (SYSTEM.cpy):**
+```cobol
+       01  ＨＯＧＥＩ－Ｉ－レコード.
+           05  ＨＯＧＥＩ－Ｉ－ID         PIC 9(08).
+           05  ＨＯＧＥＩ－Ｉ－名前       PIC X(50).
+           05  ＨＯＧＥＩ－Ｉー変数      PIC X(100).
+```
+
+**COBOL:**
+```cobol
+       COPY SYSTEM 
+           DISJOINING ＨＯＧＥＩ－Ｉ 
+           JOINING ＦＵＧＡ 
+           AS PREFIX.
+       
+       PROCEDURE DIVISION.
+           *> ハイフンやーを含む接頭辞名にも対応
+           MOVE 12345678 TO ＦＵＧＡーID.
+           DISPLAY ＦＵＧＡー名前.
+           MOVE 'ABC' TO ＦＵＧＡー変数.
+           *> F12 キーで ＦＵＧＡー変数 から COPYBOOK の ＨＯＧＥＩ－Ｉー変数 へジャンプ
+```
+
+**変換ルール / Transformation Rules:**
+- `ＨＯＧＥＩ－Ｉ－ID` → `ＦＵＧＡ－ID`
+- `ＨＯＧＥＩ－Ｉ－名前` → `ＦＵＧＡ－名前`
+- `ＨＯＧＥＩ－Ｉー変数` → `ＦＵＧＡー変数`
+
+接頭辞名自体にハイフン (`-`) やー (`ー`) が含まれていても正しく処理されます。
+
+Prefix names containing hyphens (`-`) or ー (`ー`) are properly handled.
+
+### 例6: REPLACINGとの組み合わせ / Example 6: Combined with REPLACING
 
 ```cobol
        COPY COPYBOOK

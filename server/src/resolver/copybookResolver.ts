@@ -66,12 +66,12 @@ export class CopybookResolver {
         // COPY CUSTMAST IN LIBNAME.
         // COPY CUSTMAST REPLACING ==CUST== BY ==CUSTOMER==.
         // COPY CP-SMPL2 DISJOINING XXX JOINING TODAY AS PREFIX.
-        // 日本語を含むUnicode文字をサポート: [\w\u0080-\uFFFF\-]+
+        // 日本語を含むUnicode文字をサポート: [\w\u0080-\uFFFF\-ー]+
         const patterns = [
-            /COPY\s+([\w\u0080-\uFFFF\-]+)/i,
+            /COPY\s+([\w\u0080-\uFFFF\-ー]+)/i,
             /COPY\s+"([^"]+)"/i,
             /COPY\s+'([^']+)'/i,
-            /COPY\s+([\w\u0080-\uFFFF\-]+)\s+IN\s+([\w\u0080-\uFFFF\-]+)/i
+            /COPY\s+([\w\u0080-\uFFFF\-ー]+)\s+IN\s+([\w\u0080-\uFFFF\-ー]+)/i
         ];
         
         for (const pattern of patterns) {
@@ -123,8 +123,9 @@ export class CopybookResolver {
         this.log(`[DEBUG-PREFIX] extractDisjoiningJoiningRules() called with: "${line}"`);
         
         // DISJOINING <old> JOINING <new> AS PREFIX のパターン
-        // 日本語を含むUnicode文字をサポート: [\w\u0080-\uFFFF\-]+
-        const pattern = /DISJOINING\s+([\w\u0080-\uFFFF\-]+)\s+JOINING\s+([\w\u0080-\uFFFF\-]+)\s+AS\s+PREFIX/gi;
+        // 日本語を含むUnicode文字をサポート: [\w\u0080-\uFFFF\-ー]+
+        // 接頭辞名にハイフンやーを含む場合にも対応（例: ＨＯＧＥＩ－Ｉ, XXX-YYY）
+        const pattern = /DISJOINING\s+([\w\u0080-\uFFFF\-ー]+)\s+JOINING\s+([\w\u0080-\uFFFF\-ー]+)\s+AS\s+PREFIX/gi;
         let match;
         
         this.log(`[DEBUG-PREFIX] Pattern for extraction: ${pattern.source}`);
