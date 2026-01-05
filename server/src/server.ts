@@ -21,7 +21,6 @@ import {
     CompletionItem,
     CompletionItemKind,
     CompletionParams,
-    InsertTextFormat,
     SignatureHelp,
     SignatureHelpParams,
     SignatureInformation,
@@ -587,7 +586,6 @@ function convertToDocumentSymbols(symbols: SymbolInfo[], document: TextDocument)
     for (const symbol of symbols) {
         if (symbol.type === 'division') {
             const lineText = lines[symbol.line] || '';
-            const lineLength = lineText.length;
             const endLine = symbol.endLine !== undefined ? symbol.endLine : lines.length - 1;
             const endLineText = lines[endLine] || '';
             const endLineLength = endLineText.length;
@@ -800,7 +798,6 @@ function collectCopyStatements(lines: string[]): Array<{statement: string, start
         const contentLine = stripSequenceArea(lines[i]);
         const trimmedLine = contentLine.trim();
         const lineWithoutTrailingComment = trimmedLine.split(/\s*\*>/)[0].trim();
-        const normalizedLine = trimmedLine.toUpperCase();
         const normalizedNoComment = lineWithoutTrailingComment.toUpperCase();
 
         if (/^COPY\s+/i.test(normalizedNoComment)) {
@@ -1617,7 +1614,6 @@ function validateDocument(document: TextDocument): void {
         const text = document.getText();
         const lines = text.split('\n');
         const diagnostics: Diagnostic[] = [];
-        const resolver = ensureCopybookResolver();
         
         // コピーブックを事前にロードしてインデックス化
         loadCopybooksFromDocument(document);
