@@ -778,8 +778,18 @@ function searchInCopybooksWithPath(document: TextDocument, word: string): { symb
             if (copybookInfo.replacing.length > 0) {
                 // 逆変換：現在のコード内の名前 → COPYBOOK 内の元の名前
                 for (const rule of copybookInfo.replacing) {
-                    const regex = new RegExp(`\\b${rule.to}\\b`, 'gi');
-                    searchWord = searchWord.replace(regex, rule.from);
+                    if (rule.isPrefix) {
+                        // 接頭辞置換の逆変換
+                        // 例: FUGA-変数 → HOGE-変数
+                        const escapedTo = rule.to.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                        const regex = new RegExp(`^${escapedTo}(-[\w\u0080-\uFFFF\-]+)$`, 'i');
+                        searchWord = searchWord.replace(regex, `${rule.from}$1`);
+                    } else {
+                        // 通常の単語置換の逆変換
+                        const escapedTo = rule.to.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                        const regex = new RegExp(`^${escapedTo}$`, 'i');
+                        searchWord = searchWord.replace(regex, rule.from);
+                    }
                 }
             }
             
@@ -827,8 +837,18 @@ function searchInCopybooks(document: TextDocument, word: string): Definition | n
             if (copybookInfo.replacing.length > 0) {
                 // 逆変換：現在のコード内の名前 → COPYBOOK 内の元の名前
                 for (const rule of copybookInfo.replacing) {
-                    const regex = new RegExp(`\\b${rule.to}\\b`, 'gi');
-                    searchWord = searchWord.replace(regex, rule.from);
+                    if (rule.isPrefix) {
+                        // 接頭辞置換の逆変換
+                        // 例: FUGA-変数 → HOGE-変数
+                        const escapedTo = rule.to.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                        const regex = new RegExp(`^${escapedTo}(-[\w\u0080-\uFFFF\-]+)$`, 'i');
+                        searchWord = searchWord.replace(regex, `${rule.from}$1`);
+                    } else {
+                        // 通常の単語置換の逆変換
+                        const escapedTo = rule.to.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                        const regex = new RegExp(`^${escapedTo}$`, 'i');
+                        searchWord = searchWord.replace(regex, rule.from);
+                    }
                 }
             }
             

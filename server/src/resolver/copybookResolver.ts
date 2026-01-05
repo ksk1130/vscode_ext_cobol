@@ -16,7 +16,9 @@ export interface CopybookConfig {
 export interface ReplacingRule {
     from: string;
     to: string;
+    isPrefix?: boolean;  // DISJOINING/JOINING AS PREFIX の場合は true
 }
+
 
 /**
  * COPYBOOKリゾルバークラス
@@ -126,7 +128,8 @@ export class CopybookResolver {
         while ((match = pattern.exec(line)) !== null) {
             rules.push({
                 from: match[1].trim(),
-                to: match[2].trim()
+                to: match[2].trim(),
+                isPrefix: true  // 接頭辞置換であることを示す
             });
         }
         
@@ -142,12 +145,22 @@ export class CopybookResolver {
     applyReplacingRules(text: string, rules: ReplacingRule[]): string {
         let result = text;
         for (const rule of rules) {
-            // 日本語を含むUnicode文字をサポートするため、\b（単語境界）の代わりに
-            // 前後がスペース、ハイフン、ピリオド、または文字列の始終であることを確認
-            // rule.fromに含まれる正規表現の特殊文字をエスケープ
-            const escapedFrom = rule.from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            const regex = new RegExp(`(?<=^|\\s|-|\\.)${escapedFrom}(?=\\s|-|\\.|$)`, 'gi');
-            result = result.replace(regex, rule.to);
+            if (rule.isPrefix) {
+                // 接頭辞置換（DISJOINING/JOINING AS PREFIX）
+                // 例: HOGE-変数 → FUGA-変数
+                const escapedFrom = rule.from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                // 行頭またはスペース・ピリオドの後に接頭辞があり、その後にハイフンが続くパターン
+                const regex = new RegExp(`(^|\\s|\\.)${escapedFrom}(-[\w\u0080-\uFFFF\-]+)`, 'gi');
+                result = result.replace(regex, `$1${rule.to}$2`);
+            } else {
+                // 通常の単語置換（REPLACING）
+                // 日本語を含むUnicode文字をサポートするため、\b（単語境界）の代わりに
+                // 前後がスペース、ハイフン、ピリオド、または文字列の始終であることを確認
+                // rule.fromに含まれる正規表現の特殊文字をエスケープ
+                const escapedFrom = rule.from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const regex = new RegExp(`(?<=^|\\s|-|\\.)${escapedFrom}(?=\\s|-|\\.|$)`, 'gi');
+                result = result.replace(regex, rule.to);
+            }
         }
         return result;
     }
