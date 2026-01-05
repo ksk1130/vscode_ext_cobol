@@ -225,56 +225,52 @@ export class CopybookResolver {
             return;
         }
         
-        const log = this.logCallback; // ローカル変数に代入してTypeScriptの型チェックを通す
-        
-        log('[CopybookResolver] Scanning COPYBOOK files...');
-        log(`[CopybookResolver] Search paths: ${this.config.searchPaths.join(', ')}`);
-        log(`[CopybookResolver] Extensions: ${this.config.extensions.join(', ')}`);
+        this.logCallback('[CopybookResolver] Scanning COPYBOOK files...');
+        this.logCallback(`[CopybookResolver] Search paths: ${this.config.searchPaths.join(', ')}`);
+        this.logCallback(`[CopybookResolver] Extensions: ${this.config.extensions.join(', ')}`);
         
         let totalFiles = 0;
         
         for (const searchPath of this.config.searchPaths) {
             if (!searchPath || !fs.existsSync(searchPath)) {
-                log(`[CopybookResolver]   Path not found: ${searchPath}`);
+                this.logCallback(`[CopybookResolver]   Path not found: ${searchPath}`);
                 continue;
             }
             
             try {
-                const files = fs.readdirSync(searchPath);
+                // withFileTypes オプションを使用して効率的にファイル情報を取得
+                const dirents = fs.readdirSync(searchPath, { withFileTypes: true });
                 const copybookFiles: string[] = [];
                 
-                for (const file of files) {
-                    const filePath = path.join(searchPath, file);
-                    
+                for (const dirent of dirents) {
                     // ディレクトリはスキップ
-                    if (!fs.statSync(filePath).isFile()) {
+                    if (!dirent.isFile()) {
                         continue;
                     }
                     
                     // 拡張子チェック
-                    const ext = path.extname(file);
-                    if (this.config.extensions.includes(ext) || 
-                        (this.config.extensions.includes('') && ext === '')) {
-                        copybookFiles.push(file);
+                    const ext = path.extname(dirent.name);
+                    if (this.config.extensions.includes(ext)) {
+                        copybookFiles.push(dirent.name);
                     }
                 }
                 
                 totalFiles += copybookFiles.length;
                 
                 if (copybookFiles.length > 0) {
-                    log(`[CopybookResolver]   Found ${copybookFiles.length} file(s) in ${searchPath}:`);
+                    this.logCallback(`[CopybookResolver]   Found ${copybookFiles.length} file(s) in ${searchPath}:`);
                     copybookFiles.forEach(file => {
-                        log(`[CopybookResolver]     - ${file}`);
+                        this.logCallback!(`[CopybookResolver]     - ${file}`);
                     });
                 } else {
-                    log(`[CopybookResolver]   No COPYBOOK files found in ${searchPath}`);
+                    this.logCallback(`[CopybookResolver]   No COPYBOOK files found in ${searchPath}`);
                 }
             } catch (err) {
                 const errorMessage = err instanceof Error ? err.message : String(err);
-                log(`[CopybookResolver]   Error scanning ${searchPath}: ${errorMessage}`);
+                this.logCallback(`[CopybookResolver]   Error scanning ${searchPath}: ${errorMessage}`);
             }
         }
         
-        log(`[CopybookResolver] Total COPYBOOK files found: ${totalFiles}`);
+        this.logCallback(`[CopybookResolver] Total COPYBOOK files found: ${totalFiles}`);
     }
 }
