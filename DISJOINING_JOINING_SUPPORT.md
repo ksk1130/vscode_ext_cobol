@@ -6,14 +6,27 @@
 
 NETCOBOL拡張構文である `DISJOINING/JOINING AS PREFIX` をサポートしました。この機能により、COPYBOOKの変数接頭辞を置き換えて使用する際の「定義へジャンプ」が正しく動作するようになりました。
 
+また、複数行にわたるCOPY文もサポートしています。
+
 ### English
 
 Added support for NETCOBOL extended syntax `DISJOINING/JOINING AS PREFIX`. This feature enables "Go to Definition" to work correctly when using COPYBOOKs with prefix replacement.
 
+Multi-line COPY statements are also supported.
+
 ## 構文 / Syntax
 
+### 単一行 / Single Line
 ```cobol
 COPY <COPYBOOK名> DISJOINING <旧プリフィックス> JOINING <新プリフィックス> AS PREFIX.
+```
+
+### 複数行 / Multi-Line
+```cobol
+COPY <COPYBOOK名>
+    DISJOINING <旧プリフィックス> 
+    JOINING <新プリフィックス> 
+    AS PREFIX.
 ```
 
 ### 例 / Example
@@ -89,6 +102,27 @@ HOGE-カウンター  → FUGA-カウンター
 
 ### 実装 / Implementation
 
+#### 0. 複数行COPY文の結合 / Multi-Line COPY Statement Combination
+
+`collectCopyStatements()` 関数が複数行にわたるCOPY文を自動的に結合します：
+
+```typescript
+function collectCopyStatements(lines: string[]): Array<{statement: string, startLine: number}> {
+    // COPY文の開始を検出
+    // ピリオド(.)で終わるまで行を結合
+    // 結合された完全なCOPY文を返す
+}
+```
+
+これにより、以下のような複数行COPY文も正しく処理されます：
+
+```cobol
+COPY COPYBOOK
+    DISJOINING HOGE 
+    JOINING FUGA 
+    AS PREFIX.
+```
+
 #### 1. ルール抽出 / Rule Extraction
 
 `copybookResolver.extractDisjoiningJoiningRules()` が COPY文から DISJOINING/JOINING AS PREFIX 句を抽出します。
@@ -123,15 +157,16 @@ if (rule.isPrefix) {
 
 ### 変更されたファイル / Modified Files
 
+- `server/src/server.ts`:
+  - `collectCopyStatements()` 関数を追加 - 複数行COPY文を結合
+  - `searchInCopybooksWithPath()` で複数行COPY文に対応
+  - `searchInCopybooks()` で複数行COPY文に対応
+  - `loadCopybooksFromDocument()` で複数行COPY文に対応
+
 - `server/src/resolver/copybookResolver.ts`:
   - `ReplacingRule` インターフェースに `isPrefix` プロパティを追加
   - `extractDisjoiningJoiningRules()` で `isPrefix: true` を設定
   - `applyReplacingRules()` で接頭辞置換ロジックを追加
-
-- `server/src/server.ts`:
-  - `searchInCopybooksWithPath()` で逆変換ロジックを改善
-  - `searchInCopybooks()` で逆変換ロジックを改善
-  - 接頭辞置換とUnicode文字の両方に対応
 
 ## 使用例 / Usage Examples
 
@@ -155,7 +190,39 @@ if (rule.isPrefix) {
            *> F12で CLIENT-ID から COPYBOOK の CUST-ID へジャンプ可能
 ```
 
-### 例2: 日本語変数名 / Example 2: Japanese Variable Names
+### 例2: 複数行COPY文 / Example 2: Multi-Line COPY Statement
+
+**COPYBOOK (DATA.cpy):**
+```cobol
+       01  OLD-RECORD.
+           05  OLD-ID       PIC 9(08).
+           05  OLD-NAME     PIC X(50).
+```
+
+**COBOL:**
+```cobol
+       COPY DATA
+           DISJOINING OLD
+           JOINING NEW
+           AS PREFIX.
+       
+       PROCEDURE DIVISION.
+           MOVE 12345678 TO NEW-ID.
+           DISPLAY NEW-NAME.
+           *> F12で NEW-ID から COPYBOOK の OLD-ID へジャンプ可能
+```
+
+### 例3: 日本語変数名 / Example 3: Japanese Variable Names
+
+**COPYBOOK (データ定義.cpy):**
+```cobol
+       01  旧プリフィックス-レコード.
+           05  旧プリフィックス-ID       PIC 9(08).
+           05  旧プリフィックス-名前     PIC X(50).
+           05  旧プリフィックス-住所     PIC X(100).
+```
+
+### 例3: 日本語変数名 / Example 3: Japanese Variable Names
 
 **COPYBOOK (データ定義.cpy):**
 ```cobol
@@ -177,7 +244,7 @@ if (rule.isPrefix) {
            DISPLAY 新プリフィックス-名前.
 ```
 
-### 例3: REPLACINGとの組み合わせ / Example 3: Combined with REPLACING
+### 例4: REPLACINGとの組み合わせ / Example 4: Combined with REPLACING
 
 ```cobol
        COPY COPYBOOK
