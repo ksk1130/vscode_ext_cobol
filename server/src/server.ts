@@ -138,9 +138,29 @@ interface CobolSettings {
 const connection = createConnection(ProposedFeatures.all);
 const documents = new TextDocuments(TextDocument);
 
+// Configure logger - if it fails, continue without structured logging
+configureLogger().catch(err => {
+    connection.console.error(`Failed to configure LogTape logger: ${err}`);
+});
+
+const logger = getServerLogger();
+
+// デフォルト設定
+const defaultSettings: CobolSettings = {
+    copybookPaths: [],
+    programSearchPaths: [],
+    fileExtensions: ['.cob', '.COB'],
+    copybookExtensions: ['.cob']
+};
+
+let globalSettings: CobolSettings = defaultSettings;
+
 let copybookResolver: CopybookResolver;
-let programResolver: ProgramResolver;
-let symbolIndex:  SymbolIndex;
+let programResolver = new ProgramResolver((message: string) => connection.console.log(message));
+let symbolIndex = new SymbolIndex(
+    (message: string) => connection.console.log(message),
+    defaultSettings.copybookExtensions
+);
 let workspaceRoot: string | null = null;
 let hasConfigurationCapability = false;
 let hasWorkspaceFolderCapability = false;
