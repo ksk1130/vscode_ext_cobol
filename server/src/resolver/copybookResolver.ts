@@ -120,12 +120,17 @@ export class CopybookResolver {
     extractDisjoiningJoiningRules(line: string): ReplacingRule[] {
         const rules: ReplacingRule[] = [];
         
+        this.log(`[DEBUG-PREFIX] extractDisjoiningJoiningRules() called with: "${line}"`);
+        
         // DISJOINING <old> JOINING <new> AS PREFIX のパターン
         // 日本語を含むUnicode文字をサポート: [\w\u0080-\uFFFF\-]+
         const pattern = /DISJOINING\s+([\w\u0080-\uFFFF\-]+)\s+JOINING\s+([\w\u0080-\uFFFF\-]+)\s+AS\s+PREFIX/gi;
         let match;
         
+        this.log(`[DEBUG-PREFIX] Pattern for extraction: ${pattern.source}`);
+        
         while ((match = pattern.exec(line)) !== null) {
+            this.log(`[DEBUG-PREFIX] Match found! from="${match[1]}" to="${match[2]}"`);
             rules.push({
                 from: match[1].trim(),
                 to: match[2].trim(),
@@ -133,7 +138,18 @@ export class CopybookResolver {
             });
         }
         
+        this.log(`[DEBUG-PREFIX] Extracted ${rules.length} DISJOINING/JOINING rules: ${JSON.stringify(rules)}`);
+        
         return rules;
+    }
+    
+    /**
+     * ログ出力ヘルパー
+     */
+    private log(message: string): void {
+        if (this.logCallback) {
+            this.logCallback(message);
+        }
     }
     
     /**
