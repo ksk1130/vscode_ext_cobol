@@ -799,16 +799,18 @@ function collectCopyStatements(lines: string[]): Array<{statement: string, start
     for (let i = 0; i < lines.length; i++) {
         const contentLine = stripSequenceArea(lines[i]);
         const trimmedLine = contentLine.trim();
+        const lineWithoutTrailingComment = trimmedLine.split(/\s*\*>/)[0].trim();
         const normalizedLine = trimmedLine.toUpperCase();
-        
-        if (/^COPY\s+/i.test(normalizedLine)) {
+        const normalizedNoComment = lineWithoutTrailingComment.toUpperCase();
+
+        if (/^COPY\s+/i.test(normalizedNoComment)) {
             // COPY文の開始
             inCopyStatement = true;
             startLine = i;
-            currentStatement = trimmedLine;
+            currentStatement = lineWithoutTrailingComment;
             
             // 同じ行でピリオドで終わっている場合
-            if (trimmedLine.endsWith('.')) {
+            if (lineWithoutTrailingComment.endsWith('.')) {
                 copyStatements.push({statement: currentStatement, startLine});
                 currentStatement = '';
                 inCopyStatement = false;
@@ -816,10 +818,10 @@ function collectCopyStatements(lines: string[]): Array<{statement: string, start
             }
         } else if (inCopyStatement) {
             // COPY文の継続
-            currentStatement += ' ' + trimmedLine;
+            currentStatement += ' ' + lineWithoutTrailingComment;
             
             // ピリオドで終わっている場合
-            if (trimmedLine.endsWith('.')) {
+            if (lineWithoutTrailingComment.endsWith('.')) {
                 copyStatements.push({statement: currentStatement, startLine});
                 currentStatement = '';
                 inCopyStatement = false;
