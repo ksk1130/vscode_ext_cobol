@@ -3,6 +3,9 @@
 COBOL 向けの VS Code 拡張機能です。COBOL ソース (.cbl/.cob/.cobol/.cpy) に対して定義ジャンプ、ホバー、診断、**IntelliSense（自動補完）**などの機能を提供します。
 
 ## 機能
+- **日本語変数名・関数名のサポート**（Shift-JISエンコーディング対応）
+  - 日本語を含む変数名、パラグラフ名、セクション名の認識
+  - 日本語識別子でのアウトライン表示、定義ジャンプ、ホバー、自動補完をサポート
 - 変数・COPYBOOK・段落/節 (PERFORM)・プログラム呼び出し (CALL) への定義ジャンプ
 - ホバー表示（レベル、PIC、行/桁、定義ファイル名を表示。COPYBOOK 由来も表示）
 - **IntelliSense（自動補完）機能**
@@ -128,5 +131,45 @@ code --install-extension <package-name>-<version>.vsix
 - ロギング: @logtape/logtape (^1.3.5) - 構造化ロギングライブラリ
 
 ## 設定
-- COPYBOOK 検索パス: `copybooks/`、`copy/`、環境変数 `COBOL_COPYPATH`
-- 対応拡張子: .cpy, .cbl, .cob, .cobol（大文字小文字を区別しない）
+VS Code の設定（settings.json）で以下をカスタマイズできます：
+
+### Language Server設定（サーバーサイド）
+以下の設定は Language Server で使用され、COPYBOOKの解決やプログラム検索に影響します：
+
+- **cobol.copybookPaths**: COPYBOOK検索パス（配列）
+  - デフォルト: `["./copybooks", "./copy", "./COPY"]`
+  - 例: `["./lib/copybooks", "./includes"]`
+  - 相対パスはワークスペースルートからの相対パスとして解釈されます
+  
+- **cobol.copybookExtensions**: COPYBOOKファイルの拡張子（配列）
+  - デフォルト: `[".cpy", ".CPY", ".cbl", ".CBL", ""]`
+  - 空文字列 `""` は拡張子なしのファイルを許可します
+  
+- **cobol.programSearchPaths**: COBOLプログラム検索パス（配列）
+  - デフォルト: `["./src", "./programs", "./SRC"]`
+  
+- **cobol.fileExtensions**: COBOLファイルの拡張子（配列）
+  - デフォルト: `[".cbl", ".cob", ".cobol", ".CBL", ".COB", ".COBOL"]`
+
+### クライアント設定（エディタサイド）
+- **cobol.enableRulers**: COBOLファイルで7, 8, 12列目に縦線を表示（boolean）
+  - デフォルト: `true`
+
+環境変数 `COBOL_COPYPATH` も引き続きサポートされます。
+
+### 設定例
+`.vscode/settings.json`:
+```json
+{
+  "cobol.copybookPaths": [
+    "./lib/copybooks",
+    "./external/includes"
+  ],
+  "cobol.copybookExtensions": [
+    ".cpy",
+    ".copy",
+    ""
+  ],
+  "cobol.enableRulers": true
+}
+```
