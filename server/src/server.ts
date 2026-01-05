@@ -25,7 +25,8 @@ import {
     SignatureHelp,
     SignatureHelpParams,
     SignatureInformation,
-    ParameterInformation
+    ParameterInformation,
+    DidChangeConfigurationNotification
 } from 'vscode-languageserver/node';
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -37,6 +38,16 @@ import { CopybookResolver } from './resolver/copybookResolver';
 import { ProgramResolver } from './resolver/programResolver';
 import { SymbolIndex, SymbolInfo } from './index/symbolIndex';
 
+/**
+ * COBOL LSP設定インターフェース
+ */
+interface CobolSettings {
+    copybookPaths: string[];
+    programSearchPaths: string[];
+    fileExtensions: string[];
+    copybookExtensions: string[];
+}
+
 const connection = createConnection(ProposedFeatures.all);
 const documents = new TextDocuments(TextDocument);
 
@@ -44,6 +55,18 @@ let copybookResolver: CopybookResolver;
 let programResolver: ProgramResolver;
 let symbolIndex:  SymbolIndex;
 let workspaceRoot: string | null = null;
+let hasConfigurationCapability = false;
+let hasWorkspaceFolderCapability = false;
+
+// デフォルト設定
+const defaultSettings: CobolSettings = {
+    copybookPaths: ['./copybooks', './copy', './COPY'],
+    programSearchPaths: ['./src', './programs', './SRC'],
+    fileExtensions: ['.cbl', '.cob', '.cobol', '.CBL', '.COB', '.COBOL'],
+    copybookExtensions: ['.cpy', '.CPY', '.cbl', '.CBL', '']
+};
+
+let globalSettings: CobolSettings = defaultSettings;
 
 /**
  * LSP初期化時にワークスペース情報を受け取り、各種リゾルバーを構築する。
@@ -52,24 +75,14 @@ let workspaceRoot: string | null = null;
 connection.onInitialize((params:  InitializeParams) => {
     workspaceRoot = params.rootUri ?  URI.parse(params.rootUri).fsPath : null;
     
-    // リゾルバー初期化
-    copybookResolver = new CopybookResolver({
-        searchPaths: [
-            workspaceRoot ?  path.join(workspaceRoot, 'copybooks') : '',
-            workspaceRoot ? path.join(workspaceRoot, 'copy') : '',
-            // cobol標準のCOPYBOOKパス
-            process.env.COBOL_COPYPATH || ''
-        ].filter(p => p),
-        extensions: ['.cpy', '.CPY', '.cbl', '.CBL', '']
-    });
-    
-    programResolver = new ProgramResolver();
-    symbolIndex = new SymbolIndex();
-    
-    // ワークスペースインデックス作成
-    if (workspaceRoot) {
-        programResolver.indexWorkspace(workspaceRoot);
-    }
+    // クライアントの機能を確認
+    const capabilities = params.capabilities;
+    hasConfigurationCapability = !!(
+        capabilities.workspace && !!capabilities.workspace.configuration
+    );
+    hasWorkspaceFolderCapability = !!(
+        capabilities.workspace && !!capabilities.workspace.workspaceFolders
+    );
     
     return {
         capabilities:  {
@@ -88,6 +101,91 @@ connection.onInitialize((params:  InitializeParams) => {
         }
     };
 });
+
+/**
+ * 初期化完了時の処理
+ * 設定を取得してリゾルバーを初期化する
+ */
+connection.onInitialized(async () => {
+    if (hasConfigurationCapability) {
+        // 設定変更通知を登録
+        connection.client.register(DidChangeConfigurationNotification.type, undefined);
+    }
+    
+    // 初期設定を取得してリゾルバーを初期化
+    await updateConfiguration();
+});
+
+/**
+ * 設定変更時の処理
+ */
+connection.onDidChangeConfiguration(async change => {
+    if (hasConfigurationCapability) {
+        // 設定をリセット
+        globalSettings = defaultSettings;
+    } else {
+        globalSettings = <CobolSettings>(
+            (change.settings.cobol || defaultSettings)
+        );
+    }
+    
+    // 設定が変更されたらリゾルバーを再初期化
+    await updateConfiguration();
+});
+
+/**
+ * 設定を取得してリゾルバーを更新する
+ */
+async function updateConfiguration() {
+    if (hasConfigurationCapability) {
+        try {
+            const config = await connection.workspace.getConfiguration('cobol');
+            globalSettings = {
+                copybookPaths: config.copybookPaths || defaultSettings.copybookPaths,
+                programSearchPaths: config.programSearchPaths || defaultSettings.programSearchPaths,
+                fileExtensions: config.fileExtensions || defaultSettings.fileExtensions,
+                copybookExtensions: config.copybookExtensions || defaultSettings.copybookExtensions
+            };
+        } catch (err) {
+            connection.console.log(`[updateConfiguration] Failed to get configuration: ${err}`);
+            globalSettings = defaultSettings;
+        }
+    }
+    
+    // 設定値に基づいてCopybookResolverを初期化/再初期化
+    const searchPaths = globalSettings.copybookPaths.map(p => {
+        if (workspaceRoot && p.startsWith('./')) {
+            return path.join(workspaceRoot, p.substring(2));
+        } else if (workspaceRoot && !path.isAbsolute(p)) {
+            return path.join(workspaceRoot, p);
+        }
+        return p;
+    }).concat([
+        // cobol標準のCOPYBOOKパス
+        process.env.COBOL_COPYPATH || ''
+    ]).filter(p => p);
+    
+    copybookResolver = new CopybookResolver({
+        searchPaths: searchPaths,
+        extensions: globalSettings.copybookExtensions
+    });
+    
+    // ProgramResolverとSymbolIndexの初期化
+    if (!programResolver) {
+        programResolver = new ProgramResolver();
+    }
+    if (!symbolIndex) {
+        symbolIndex = new SymbolIndex();
+    }
+    
+    // ワークスペースインデックス作成
+    if (workspaceRoot) {
+        programResolver.indexWorkspace(workspaceRoot);
+    }
+    
+    connection.console.log(`[updateConfiguration] Copybook search paths: ${searchPaths.join(', ')}`);
+    connection.console.log(`[updateConfiguration] Copybook extensions: ${globalSettings.copybookExtensions.join(', ')}`);
+}
 
 /**
  * ドキュメント変更時の処理
@@ -968,15 +1066,22 @@ function getCopybookCompletions(document: TextDocument): CompletionItem[] {
     const sourceFileDir = path.dirname(URI.parse(document.uri).fsPath);
     
     try {
-        // COPYBOOK 検索パスから候補を取得
+        // 設定から COPYBOOK 検索パスを取得
+        const configuredPaths = globalSettings.copybookPaths.map(p => {
+            if (workspaceRoot && p.startsWith('./')) {
+                return path.join(workspaceRoot, p.substring(2));
+            } else if (workspaceRoot && !path.isAbsolute(p)) {
+                return path.join(workspaceRoot, p);
+            }
+            return p;
+        });
+        
         const searchPaths = [
-            workspaceRoot ? path.join(workspaceRoot, 'copybooks') : '',
-            workspaceRoot ? path.join(workspaceRoot, 'copy') : '',
-            workspaceRoot ? path.join(workspaceRoot, 'COPY') : '',
-            sourceFileDir
+            sourceFileDir,
+            ...configuredPaths
         ].filter(p => p && fs.existsSync(p));
         
-        const extensions = ['.cpy', '.CPY', '.cbl', '.CBL'];
+        const extensions = globalSettings.copybookExtensions;
         
         for (const searchPath of searchPaths) {
             const files = fs.readdirSync(searchPath);
