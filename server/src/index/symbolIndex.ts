@@ -223,7 +223,7 @@ export class SymbolIndex {
                             column: 8 + columnInContent,  // column 8以降からのオフセット
                             picture: varMatch[4]
                         });
-                        this.log(`[SymbolIndex] Indexed variable: ${varMatch[2]} (level ${levelNum}) at line ${i + 1}, column ${8 + columnInContent}`);
+                        this.log(`[SymbolIndex] ${uri} Indexed variable: ${varMatch[2]} (level ${levelNum}) at line ${i + 1}, column ${8 + columnInContent}`);
                     }
                 }
                 
