@@ -24,15 +24,29 @@ export interface SymbolInfo {
     column: number;
     picture?: string;  // PIC句
     endLine?: number;  // Division の終了行（division タイプのみ）
+    copybookUri?: string;  // このシンボルが定義されているCOPYBOOKのURI（COPYBOOKから読み込まれた場合）
+}
+
+/**
+ * COPYBOOK参照情報インターフェース
+ * ドキュメント内で参照されているCOPYBOOKの情報を保持
+ */
+export interface CopybookReference {
+    name: string;           // COPYBOOK名
+    uri: string;            // COPYBOOKファイルのURI
+    referenceLine: number;  // 参照元ドキュメント内のCOPY文の行番号
 }
 
 /**
  * シンボルインデックスクラス
  * - 変数、パラグラフ、セクション、Divisionの定義位置を管理
  * - ドキュメントごとにインデックスを保持
+ * - COPYBOOK参照情報を管理し、どの変数がどのCOPYBOOKから来たかを追跡
  */
 export class SymbolIndex {
     private symbols: Map<string, SymbolInfo[]> = new Map();
+    // ドキュメントURIをキーとして、そのドキュメントで参照されているCOPYBOOKのリストを保持
+    private copybookReferences: Map<string, CopybookReference[]> = new Map();
     
     /**
      * ドキュメントから変数・パラグラフ・セクション・Divisionを抽出
@@ -251,5 +265,83 @@ export class SymbolIndex {
      */
     getAllSymbols(documentUri: string): SymbolInfo[] {
         return this.symbols.get(documentUri) || [];
+    }
+    
+    /**
+     * ドキュメントにCOPYBOOK参照を登録する
+     * @param documentUri ドキュメントURI
+     * @param copybookName COPYBOOK名
+     * @param copybookUri COPYBOOKファイルのURI
+     * @param referenceLine COPY文の行番号
+     */
+    registerCopybookReference(documentUri: string, copybookName: string, copybookUri: string, referenceLine: number): void {
+        if (!this.copybookReferences.has(documentUri)) {
+            this.copybookReferences.set(documentUri, []);
+        }
+        
+        const references = this.copybookReferences.get(documentUri)!;
+        // 既に同じCOPYBOOKが登録されていない場合のみ追加
+        if (!references.some(ref => ref.uri === copybookUri)) {
+            references.push({
+                name: copybookName,
+                uri: copybookUri,
+                referenceLine: referenceLine
+            });
+        }
+    }
+    
+    /**
+     * ドキュメントに登録されているCOPYBOOK参照をすべて取得
+     * @param documentUri ドキュメントURI
+     * @returns COPYBOOK参照配列
+     */
+    getCopybookReferences(documentUri: string): CopybookReference[] {
+        return this.copybookReferences.get(documentUri) || [];
+    }
+    
+    /**
+     * ドキュメントと参照されているすべてのCOPYBOOKからシンボルを検索
+     * 同じ名前のシンボルが複数ある場合は、すべて返す（COPYBOOK情報付き）
+     * @param documentUri ドキュメントURI
+     * @param symbolName シンボル名
+     * @returns 見つかったシンボル情報の配列
+     */
+    findSymbolsWithCopybookContext(documentUri: string, symbolName: string): SymbolInfo[] {
+        const results: SymbolInfo[] = [];
+        
+        // 1. ドキュメント自身のシンボルを検索
+        const documentSymbols = this.symbols.get(documentUri) || [];
+        const matchedInDocument = documentSymbols.filter(s => 
+            s.name.toUpperCase() === symbolName.toUpperCase()
+        );
+        results.push(...matchedInDocument);
+        
+        // 2. 参照されているCOPYBOOK内のシンボルを検索
+        const copybookRefs = this.copybookReferences.get(documentUri) || [];
+        for (const ref of copybookRefs) {
+            const copybookSymbols = this.symbols.get(ref.uri) || [];
+            const matchedInCopybook = copybookSymbols.filter(s => 
+                s.name.toUpperCase() === symbolName.toUpperCase()
+            );
+            // COPYBOOKから来たことを示すため、copybookUriを設定
+            for (const symbol of matchedInCopybook) {
+                results.push({
+                    ...symbol,
+                    copybookUri: ref.uri
+                });
+            }
+        }
+        
+        return results;
+    }
+    
+    /**
+     * COPYBOOK URI からCOPYBOOK名を取得する
+     * @param copybookUri COPYBOOK URI
+     * @returns COPYBOOK名（ファイル名から拡張子を除いたもの）
+     */
+    getCopybookName(copybookUri: string): string | null {
+        const match = copybookUri.match(/\/([^\/]+)\.cpy$/i);
+        return match ? match[1] : null;
     }
 }

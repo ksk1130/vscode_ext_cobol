@@ -317,21 +317,26 @@ connection.onHover((params: HoverParams): Hover | null => {
         return null;
     }
     
-    // 1. 現在のドキュメント内の記号を検索
-    let symbol = symbolIndex.findSymbol(document.uri, word);
-    connection.console.log(`[Hover] Searching in document: ${document.uri}, found: ${symbol ? 'YES' : 'NO'}`);
+    // COPYBOOK参照を含めてシンボルを検索
+    const symbols = symbolIndex.findSymbolsWithCopybookContext(document.uri, word);
+    connection.console.log(`[Hover] Found ${symbols.length} symbols with name "${word}"`);
     
-    if (symbol) {
-        return createHoverForSymbol(symbol, document.uri);
-    }
-    
-    // 2. COPY で参照されているコピーブック内の記号を検索
-    const copybookResult = searchInCopybooksWithPath(document, word);
-    connection.console.log(`[Hover] Searching in copybooks, found: ${copybookResult ? 'YES' : 'NO'}`);
-    
-    if (copybookResult) {
-        const { symbol, copybookPath } = copybookResult;
-        return createHoverForSymbol(symbol, URI.file(copybookPath).toString());
+    if (symbols.length > 0) {
+        // 最初に見つかったシンボルを返す（優先順位: ドキュメント内 > COPYBOOK）
+        const primarySymbol = symbols[0];
+        const sourceUri = primarySymbol.copybookUri || document.uri;
+        
+        // 複数のCOPYBOOKに同じ変数名がある場合の情報を追加
+        if (symbols.length > 1) {
+            connection.console.log(`[Hover] Multiple definitions found for "${word}":`);
+            symbols.forEach((s, idx) => {
+                const srcUri = s.copybookUri || document.uri;
+                const srcName = path.basename(URI.parse(srcUri).fsPath);
+                connection.console.log(`[Hover]   ${idx + 1}. ${srcName} (line ${s.line + 1})`);
+            });
+        }
+        
+        return createHoverForSymbol(primarySymbol, sourceUri);
     }
     
     connection.console.log(`[Hover] Symbol not found: ${word}`);
@@ -671,7 +676,15 @@ function createHoverForSymbol(symbol: any, documentUri: string): Hover {
         const fsPath = URI.parse(documentUri).fsPath;
         const fileName = path.basename(fsPath);
         const isCopybook = /\.cpy$/i.test(fileName);
-        lines.push(`Defined in: ${fileName}${isCopybook ? ' (COPYBOOK)' : ''}`);
+        
+        // COPYBOOKから来たシンボルの場合、COPYBOOK名を明示的に表示
+        if (symbol.copybookUri) {
+            const copybookPath = URI.parse(symbol.copybookUri).fsPath;
+            const copybookName = path.basename(copybookPath);
+            lines.push(`Defined in: ${copybookName} (COPYBOOK)`);
+        } else {
+            lines.push(`Defined in: ${fileName}${isCopybook ? ' (COPYBOOK)' : ''}`);
+        }
     } catch {}
     
     const contents: MarkupContent = {
@@ -826,19 +839,28 @@ function handleProgramCallJump(document: TextDocument, line: string): Definition
  * @returns 定義位置。見つからない場合は null。
  */
 function handleVariableJump(document:  TextDocument, word: string): Definition | null {
-    // 1. 現在のドキュメントで記号を検索
-    const symbol = symbolIndex.findSymbol(document.uri, word);
-    if (symbol) {
-        return Location. create(
-            document.uri,
-            Range.create(symbol.line, symbol.column, symbol.line, symbol.column + word.length)
-        );
-    }
+    // COPYBOOK参照を含めてシンボルを検索
+    const symbols = symbolIndex.findSymbolsWithCopybookContext(document.uri, word);
     
-    // 2. COPY で参照されているコピーブック内の記号を検索
-    const copybookSymbol = searchInCopybooks(document, word);
-    if (copybookSymbol) {
-        return copybookSymbol;
+    if (symbols.length > 0) {
+        // 最初に見つかったシンボルへジャンプ（優先順位: ドキュメント内 > COPYBOOK）
+        const primarySymbol = symbols[0];
+        const sourceUri = primarySymbol.copybookUri || document.uri;
+        
+        // 複数定義がある場合はログに記録
+        if (symbols.length > 1) {
+            connection.console.log(`[Jump] Multiple definitions found for "${word}":`);
+            symbols.forEach((s, idx) => {
+                const srcUri = s.copybookUri || document.uri;
+                const srcName = path.basename(URI.parse(srcUri).fsPath);
+                connection.console.log(`[Jump]   ${idx + 1}. ${srcName} (line ${s.line + 1})`);
+            });
+        }
+        
+        return Location.create(
+            sourceUri,
+            Range.create(primarySymbol.line, primarySymbol.column, primarySymbol.line, primarySymbol.column + word.length)
+        );
     }
     
     return null;
@@ -1151,6 +1173,7 @@ function getCobolKeywords(): CompletionItem[] {
  */
 function getVariableCompletions(document: TextDocument): CompletionItem[] {
     const completions: CompletionItem[] = [];
+    const addedVariables = new Set<string>(); // 重複チェック用
     
     // 現在のドキュメントからシンボルを取得
     symbolIndex.indexDocument(document);
@@ -1175,34 +1198,32 @@ function getVariableCompletions(document: TextDocument): CompletionItem[] {
                 detail: detail || 'Variable',
                 insertText: symbol.name
             });
+            addedVariables.add(symbol.name.toUpperCase());
         }
     }
     
     // COPY で参照されているコピーブック内の変数も追加
-    const text = document.getText();
-    const lines = text.split('\n');
-    const sourceFileDir = path.dirname(URI.parse(document.uri).fsPath);
+    const copybookRefs = symbolIndex.getCopybookReferences(document.uri);
     
-    for (const line of lines) {
-        const contentLine = stripSequenceArea(line);
-        const normalizedLine = contentLine.trim().toUpperCase();
+    for (const ref of copybookRefs) {
+        const copybookSymbols = symbolIndex.getAllSymbols(ref.uri);
+        const copybookName = path.basename(URI.parse(ref.uri).fsPath);
         
-        // Use regex to match COPY followed by whitespace to avoid matching COPYBOOK, COPY-FILE, etc.
-        if (/^COPY\s+/i.test(normalizedLine)) {
-            const copybookInfo = copybookResolver.extractCopybookInfo(contentLine);
-            if (!copybookInfo.name) continue;
-            
-            const copybookPath = copybookResolver.resolveCopybook(copybookInfo.name, sourceFileDir);
-            if (!copybookPath) continue;
-            
-            const copybookUri = URI.file(copybookPath).toString();
-            const copybookSymbols = symbolIndex.getAllSymbols(copybookUri);
-            
-            for (const symbol of copybookSymbols) {
-                if (symbol.type === 'variable') {
-                    let detail = 'From COPYBOOK';
+        for (const symbol of copybookSymbols) {
+            if (symbol.type === 'variable') {
+                const upperName = symbol.name.toUpperCase();
+                
+                // 既に追加済みの変数の場合、COPYBOOK名を追記
+                if (addedVariables.has(upperName)) {
+                    // 既存の補完候補を探して更新
+                    const existing = completions.find(c => c.label.toUpperCase() === upperName);
+                    if (existing && existing.detail) {
+                        existing.detail = `${existing.detail} | Also in ${copybookName}`;
+                    }
+                } else {
+                    let detail = `From ${copybookName}`;
                     if (symbol.level !== undefined) {
-                        detail = `Level ${symbol.level} (COPYBOOK)`;
+                        detail = `Level ${symbol.level} (${copybookName})`;
                     }
                     if (symbol.picture) {
                         detail += ` PIC ${symbol.picture}`;
@@ -1214,6 +1235,7 @@ function getVariableCompletions(document: TextDocument): CompletionItem[] {
                         detail: detail,
                         insertText: symbol.name
                     });
+                    addedVariables.add(upperName);
                 }
             }
         }
@@ -1729,13 +1751,15 @@ function loadCopybooksFromDocument(document: TextDocument): void {
     // 複数行にわたるCOPY文を結合
     const copyStatements = collectCopyStatements(lines);
     
-    for (const {statement: contentLine} of copyStatements) {
+    for (const {statement: contentLine, startLine} of copyStatements) {
         // COPY 文から COPYBOOK 名と REPLACING ルールを抽出
         const copybookInfo = copybookResolver.extractCopybookInfo(contentLine);
         if (!copybookInfo.name) continue;
         
         const copybookPath = copybookResolver.resolveCopybook(copybookInfo.name, sourceFileDir);
         if (!copybookPath || !fs.existsSync(copybookPath)) continue;
+        
+        const copybookUri = URI.file(copybookPath).toString();
         
         try {
             let copybookContent = fs.readFileSync(copybookPath, 'utf-8');
@@ -1746,12 +1770,15 @@ function loadCopybooksFromDocument(document: TextDocument): void {
             }
             
             const copybookDoc = TextDocument.create(
-                URI.file(copybookPath).toString(),
+                copybookUri,
                 'cobol',
                 1,
                 copybookContent
             );
             symbolIndex.indexDocument(copybookDoc);
+            
+            // COPYBOOK参照を登録
+            symbolIndex.registerCopybookReference(document.uri, copybookInfo.name, copybookUri, startLine);
         } catch (err) {
             // エラーは無視
         }
