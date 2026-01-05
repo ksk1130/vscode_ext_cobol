@@ -68,7 +68,10 @@ let copybookResolver = new CopybookResolver({
     extensions: defaultSettings.copybookExtensions
 }, (message: string) => connection.console.log(message));
 let programResolver = new ProgramResolver();
-let symbolIndex = new SymbolIndex((message: string) => connection.console.log(message));
+let symbolIndex = new SymbolIndex(
+    (message: string) => connection.console.log(message),
+    defaultSettings.copybookExtensions
+);
 let workspaceRoot: string | null = null;
 let hasConfigurationCapability = false;
 let hasWorkspaceFolderCapability = false;
@@ -205,8 +208,10 @@ async function updateConfiguration() {
         extensions: globalSettings.copybookExtensions
     }, (message: string) => connection.console.log(message));
     
-    // Note: programResolver and symbolIndex are now initialized at module level
-    // programResolver doesn't need reconfiguration as it has no settings-dependent behavior
+    // Update symbolIndex with new copybook extensions configuration
+    symbolIndex.setCopybookExtensions(globalSettings.copybookExtensions);
+    
+    // Note: programResolver is initialized at module level and doesn't need reconfiguration
     
     // ワークスペースインデックス作成
     if (workspaceRoot) {

@@ -48,15 +48,45 @@ export class SymbolIndex {
     // ドキュメントURIをキーとして、そのドキュメントで参照されているCOPYBOOKのリストを保持
     private copybookReferences: Map<string, CopybookReference[]> = new Map();
     private logCallback?: (message: string) => void;
+    private copybookExtensions: string[] = ['.cpy', '.CPY'];  // Default copybook extensions
     
-    constructor(logCallback?: (message: string) => void) {
+    constructor(logCallback?: (message: string) => void, copybookExtensions?: string[]) {
         this.logCallback = logCallback;
+        if (copybookExtensions && copybookExtensions.length > 0) {
+            this.copybookExtensions = copybookExtensions;
+        }
+    }
+    
+    /**
+     * COPYBOOK拡張子設定を更新する
+     * @param extensions COPYBOOK拡張子の配列
+     */
+    setCopybookExtensions(extensions: string[]): void {
+        if (extensions && extensions.length > 0) {
+            this.copybookExtensions = extensions;
+        }
     }
     
     private log(message: string): void {
         if (this.logCallback) {
             this.logCallback(message);
         }
+    }
+    
+    /**
+     * ファイルパスがCOPYBOOKかどうかを判定する
+     * @param filePath ファイルパスまたはURI
+     * @returns COPYBOOKの場合true
+     */
+    private isCopybookFile(filePath: string): boolean {
+        return this.copybookExtensions.some(ext => {
+            if (ext === '') {
+                // 拡張子なしのファイルは特別な判定が必要なのでスキップ
+                return false;
+            }
+            const regex = new RegExp(`${ext.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+            return regex.test(filePath);
+        });
     }
     
     /**
@@ -68,10 +98,10 @@ export class SymbolIndex {
         const text = document.getText();
         const lines = text.split('\n');
         
-        // COPYBOOK(.cpy) は DATA DIVISION 見出しが無いことが多いので、
-        // .cpy であればデータ定義として扱う
+        // COPYBOOK は DATA DIVISION 見出しが無いことが多いので、
+        // copybookExtensions設定に基づいて判定してデータ定義として扱う
         const fsPath = (document as any).fsPath || uri; // fallback
-        const isCopybook = /\.cpy$/i.test(fsPath) || /\.cpy$/i.test(uri);
+        const isCopybook = this.isCopybookFile(fsPath) || this.isCopybookFile(uri);
         
         let inDataDivision = isCopybook ? true : false;
         let inProcedureDivision = false;
@@ -392,7 +422,8 @@ export class SymbolIndex {
             const basename = path.basename(fsPath);
             const extname = path.extname(basename);
             
-            if (extname.toLowerCase() === '.cpy') {
+            // Check if the extension matches any of the configured COPYBOOK extensions
+            if (extname && this.copybookExtensions.some(ext => ext.toLowerCase() === extname.toLowerCase())) {
                 return basename.substring(0, basename.length - extname.length);
             }
             return basename;
