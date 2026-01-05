@@ -42,65 +42,24 @@ import { configureLogger, getServerLogger } from './logger';
 
 /**
  * ファイルのエンコーディングを自動検出
+ * - UTF-8の妥当性を厳格に検証し、失敗した場合は Shift_JIS と判断する
  * @param buffer ファイルのバッファ
  * @returns 検出されたエンコーディング ('utf-8' | 'shift_jis')
  */
 function detectEncoding(buffer: Buffer): 'utf-8' | 'shift_jis' {
-    // BOMチェック
+    // UTF-8 BOM を優先
     if (buffer.length >= 3 && buffer[0] === 0xEF && buffer[1] === 0xBB && buffer[2] === 0xBF) {
-        return 'utf-8'; // UTF-8 BOM
+        return 'utf-8';
     }
-    
-    // バイトパターンを分析（最初の1024バイトをサンプリング）
-    const sampleSize = Math.min(buffer.length, 1024);
-    let utf8Score = 0;
-    let shiftJisScore = 0;
-    
-    for (let i = 0; i < sampleSize; i++) {
-        const byte = buffer[i];
-        
-        // Shift_JISの2バイト文字パターン
-        // 1バイト目: 0x81-0x9F, 0xE0-0xEF
-        // 2バイト目: 0x40-0x7E, 0x80-0xFC
-        if (i < sampleSize - 1) {
-            const nextByte = buffer[i + 1];
-            if (((byte >= 0x81 && byte <= 0x9F) || (byte >= 0xE0 && byte <= 0xEF)) &&
-                ((nextByte >= 0x40 && nextByte <= 0x7E) || (nextByte >= 0x80 && nextByte <= 0xFC))) {
-                shiftJisScore += 2;
-                i++; // 2バイト文字なので次をスキップ
-                continue;
-            }
-        }
-        
-        // UTF-8のマルチバイト文字パターン
-        if ((byte & 0xE0) === 0xC0 && i < sampleSize - 1) {
-            // 2バイトUTF-8
-            const nextByte = buffer[i + 1];
-            if ((nextByte & 0xC0) === 0x80) {
-                utf8Score += 2;
-                i++;
-                continue;
-            }
-        } else if ((byte & 0xF0) === 0xE0 && i < sampleSize - 2) {
-            // 3バイトUTF-8（日本語の多くはここ）
-            const byte2 = buffer[i + 1];
-            const byte3 = buffer[i + 2];
-            if ((byte2 & 0xC0) === 0x80 && (byte3 & 0xC0) === 0x80) {
-                utf8Score += 3;
-                i += 2;
-                continue;
-            }
-        }
-        
-        // ASCIIの範囲（0x00-0x7F）は両方で有効
-        if (byte <= 0x7F) {
-            utf8Score += 0.1;
-            shiftJisScore += 0.1;
-        }
+
+    // UTF-8 として厳格にデコードを試行し、失敗したら Shift_JIS 扱いにする
+    try {
+        const utf8Decoder = new TextDecoder('utf-8', { fatal: true });
+        utf8Decoder.decode(buffer);
+        return 'utf-8';
+    } catch {
+        return 'shift_jis';
     }
-    
-    // スコアが高い方を採用（デフォルトはUTF-8）
-    return shiftJisScore > utf8Score ? 'shift_jis' : 'utf-8';
 }
 
 /**
@@ -154,8 +113,9 @@ const logger = getServerLogger();
 const defaultSettings: CobolSettings = {
     copybookPaths: [],
     programSearchPaths: [],
-    fileExtensions: ['.cob', '.COB'],
-    copybookExtensions: ['.cob']
+    fileExtensions: ['.cob', '.COB', '.cbl', '.CBL', '.cobol', '.COBOL'],
+    // Include .cpy variants so COPY 社員マスター resolves even when configuration is unavailable
+    copybookExtensions: ['.cpy', '.CPY', '.cbl', '.CBL', '']
 };
 
 let globalSettings: CobolSettings = defaultSettings;
@@ -169,6 +129,27 @@ let symbolIndex = new SymbolIndex(
 let workspaceRoot: string | null = null;
 let hasConfigurationCapability = false;
 let hasWorkspaceFolderCapability = false;
+
+/**
+ * Ensure copybookResolver is initialized before use to avoid undefined access during early events.
+ */
+function ensureCopybookResolver(): CopybookResolver {
+    if (copybookResolver) {
+        return copybookResolver;
+    }
+
+    const searchPaths = resolveConfiguredPaths(globalSettings.copybookPaths)
+        .concat(process.env.COBOL_COPYPATH ? [process.env.COBOL_COPYPATH] : [])
+        .filter(p => p);
+
+    copybookResolver = new CopybookResolver({
+        searchPaths,
+        extensions: globalSettings.copybookExtensions
+    }, (message: string) => logger.debug(message));
+
+    logger.debug(`[ensureCopybookResolver] Created resolver with paths: ${searchPaths.join(', ')}`);
+    return copybookResolver;
+}
 
 /**
  * COPYBOOK パス設定を解決する
@@ -862,11 +843,12 @@ function collectCopyStatements(lines: string[]): Array<{statement: string, start
  * @returns ジャンプ先の位置。解決できない場合は null。
  */
 function handleCopybookJump(document: TextDocument, line: string): Definition | null {
-    const copybookName = copybookResolver.extractCopybookName(line);
+    const resolver = ensureCopybookResolver();
+    const copybookName = resolver.extractCopybookName(line);
     if (!copybookName) return null;
     
     const sourceFileDir = path.dirname(URI.parse(document.uri).fsPath);
-    const copybookPath = copybookResolver.resolveCopybook(copybookName, sourceFileDir);
+    const copybookPath = resolver.resolveCopybook(copybookName, sourceFileDir);
     
     if (copybookPath) {
         return Location.create(
@@ -988,11 +970,13 @@ function searchInCopybooksWithPath(document: TextDocument, word: string): { symb
     const copyStatements = collectCopyStatements(lines);
     logger.debug(`[DEBUG-PREFIX] Found ${copyStatements.length} COPY statements`);
     
+    const resolver = ensureCopybookResolver();
+
     for (const {statement: contentLine} of copyStatements) {
         logger.debug(`[DEBUG-PREFIX] Processing COPY statement: "${contentLine.substring(0, 100)}..."`);
         
         // COPY 文から COPYBOOK 名と REPLACING ルールを抽出
-        const copybookInfo = copybookResolver.extractCopybookInfo(contentLine);
+        const copybookInfo = resolver.extractCopybookInfo(contentLine);
         if (!copybookInfo.name) {
             logger.debug(`[DEBUG-PREFIX] No copybook name found, skipping`);
             continue;
@@ -1001,7 +985,7 @@ function searchInCopybooksWithPath(document: TextDocument, word: string): { symb
         logger.debug(`[DEBUG-PREFIX] Copybook name: "${copybookInfo.name}"`);
         logger.debug(`[DEBUG-PREFIX] Replacing rules: ${JSON.stringify(copybookInfo.replacing)}`);
         
-        const copybookPath = copybookResolver.resolveCopybook(copybookInfo.name, sourceFileDir);
+        const copybookPath = resolver.resolveCopybook(copybookInfo.name, sourceFileDir);
         if (!copybookPath) {
             logger.debug(`[DEBUG-PREFIX] Copybook path not resolved, skipping`);
             continue;
@@ -1086,17 +1070,19 @@ function searchInCopybooks(document: TextDocument, word: string): Definition | n
     const lines = text.split('\n');
     const sourceFileDir = path.dirname(URI.parse(document.uri).fsPath);
     
+    const resolver = ensureCopybookResolver();
+    
     logger.debug(`[DEBUG-PREFIX] searchInCopybooks() called with word: "${word}"`);
     
     // 複数行にわたるCOPY文を結合
     const copyStatements = collectCopyStatements(lines);
     logger.debug(`[DEBUG-PREFIX] Found ${copyStatements.length} COPY statements`);
-    
+
     for (const {statement: contentLine} of copyStatements) {
         logger.debug(`[DEBUG-PREFIX] Processing COPY statement: "${contentLine.substring(0, 100)}..."`);
         
         // COPY 文から COPYBOOK 名と REPLACING ルールを抽出
-        const copybookInfo = copybookResolver.extractCopybookInfo(contentLine);
+        const copybookInfo = resolver.extractCopybookInfo(contentLine);
         if (!copybookInfo.name) {
             logger.debug(`[DEBUG-PREFIX] No copybook name found, skipping`);
             continue;
@@ -1105,7 +1091,7 @@ function searchInCopybooks(document: TextDocument, word: string): Definition | n
         logger.debug(`[DEBUG-PREFIX] Copybook name: "${copybookInfo.name}"`);
         logger.debug(`[DEBUG-PREFIX] Replacing rules: ${JSON.stringify(copybookInfo.replacing)}`);
         
-        const copybookPath = copybookResolver.resolveCopybook(copybookInfo.name, sourceFileDir);
+        const copybookPath = resolver.resolveCopybook(copybookInfo.name, sourceFileDir);
         if (!copybookPath) {
             logger.debug(`[DEBUG-PREFIX] Copybook path not resolved, skipping`);
             continue;
@@ -1629,6 +1615,7 @@ function validateDocument(document: TextDocument): void {
         const text = document.getText();
         const lines = text.split('\n');
         const diagnostics: Diagnostic[] = [];
+        const resolver = ensureCopybookResolver();
         
         // コピーブックを事前にロードしてインデックス化
         loadCopybooksFromDocument(document);
@@ -1645,10 +1632,10 @@ function validateDocument(document: TextDocument): void {
             
             // Use regex to match COPY followed by whitespace to avoid matching COPYBOOK, COPY-FILE, etc.
             if (/^COPY\s+/i.test(normalizedLine)) {
-                const copybookName = copybookResolver.extractCopybookName(contentLine);
+                const copybookName = resolver.extractCopybookName(contentLine);
                 if (copybookName) {
                     const sourceFileDir = path.dirname(URI.parse(document.uri).fsPath);
-                    const copybookPath = copybookResolver.resolveCopybook(copybookName, sourceFileDir);
+                    const copybookPath = resolver.resolveCopybook(copybookName, sourceFileDir);
                     if (copybookPath) {
                         const copybookUri = URI.file(copybookPath).toString();
                         const copybookSymbols = symbolIndex.getAllSymbols(copybookUri);
@@ -1855,16 +1842,17 @@ function loadCopybooksFromDocument(document: TextDocument): void {
     const sourceFileDir = path.dirname(URI.parse(document.uri).fsPath);
     
     const fs = require('fs');
+    const resolver = ensureCopybookResolver();
     
     // 複数行にわたるCOPY文を結合
     const copyStatements = collectCopyStatements(lines);
     
     for (const {statement: contentLine, startLine} of copyStatements) {
         // COPY 文から COPYBOOK 名と REPLACING ルールを抽出
-        const copybookInfo = copybookResolver.extractCopybookInfo(contentLine);
+        const copybookInfo = resolver.extractCopybookInfo(contentLine);
         if (!copybookInfo.name) continue;
         
-        const copybookPath = copybookResolver.resolveCopybook(copybookInfo.name, sourceFileDir);
+        const copybookPath = resolver.resolveCopybook(copybookInfo.name, sourceFileDir);
         if (!copybookPath || !fs.existsSync(copybookPath)) continue;
         
         const copybookUri = URI.file(copybookPath).toString();
@@ -1874,7 +1862,7 @@ function loadCopybooksFromDocument(document: TextDocument): void {
             
             // REPLACING ルールを適用
             if (copybookInfo.replacing.length > 0) {
-                copybookContent = copybookResolver.applyReplacingRules(copybookContent, copybookInfo.replacing);
+                copybookContent = resolver.applyReplacingRules(copybookContent, copybookInfo.replacing);
             }
             
             const copybookDoc = TextDocument.create(
@@ -1883,7 +1871,18 @@ function loadCopybooksFromDocument(document: TextDocument): void {
                 1,
                 copybookContent
             );
+            
+            logger.debug(`[loadCopybooksFromDocument] About to index COPYBOOK: ${copybookInfo.name}`);
+            logger.debug(`[loadCopybooksFromDocument] COPYBOOK URI: ${copybookUri}`);
+            logger.debug(`[loadCopybooksFromDocument] Content length: ${copybookContent.length} chars`);
+            
             symbolIndex.indexDocument(copybookDoc);
+            
+            const indexedSymbols = symbolIndex.getAllSymbols(copybookUri);
+            logger.debug(`[loadCopybooksFromDocument] Indexed ${indexedSymbols.length} symbols from ${copybookInfo.name}`);
+            if (indexedSymbols.length > 0) {
+                logger.debug(`[loadCopybooksFromDocument] First 5 symbols: ${indexedSymbols.slice(0, 5).map(s => s.name).join(', ')}`);
+            }
             
             // COPYBOOK参照を登録
             symbolIndex.registerCopybookReference(document.uri, copybookInfo.name, copybookUri, startLine);
