@@ -1625,24 +1625,12 @@ function validateDocument(document: TextDocument): void {
         const definedSymbols = symbolIndex.getAllSymbols(document.uri);
         definedSymbols.forEach(s => allDefinedSymbols.add(s.name.toUpperCase()));
         
-        // コピーブック内の定義も含める
-        for (const line of lines) {
-            const contentLine = stripSequenceArea(line);
-            const normalizedLine = contentLine.trim().toUpperCase();
-            
-            // Use regex to match COPY followed by whitespace to avoid matching COPYBOOK, COPY-FILE, etc.
-            if (/^COPY\s+/i.test(normalizedLine)) {
-                const copybookName = resolver.extractCopybookName(contentLine);
-                if (copybookName) {
-                    const sourceFileDir = path.dirname(URI.parse(document.uri).fsPath);
-                    const copybookPath = resolver.resolveCopybook(copybookName, sourceFileDir);
-                    if (copybookPath) {
-                        const copybookUri = URI.file(copybookPath).toString();
-                        const copybookSymbols = symbolIndex.getAllSymbols(copybookUri);
-                        copybookSymbols.forEach(s => allDefinedSymbols.add(s.name.toUpperCase()));
-                    }
-                }
-            }
+        // 登録されているCOPYBOOK参照からシンボルを取得
+        const copybookRefs = symbolIndex.getCopybookReferences(document.uri);
+        for (const ref of copybookRefs) {
+            const copybookSymbols = symbolIndex.getAllSymbols(ref.uri);
+            copybookSymbols.forEach(s => allDefinedSymbols.add(s.name.toUpperCase()));
+            logger.debug(`[validateDocument] Added ${copybookSymbols.length} symbols from COPYBOOK "${ref.name}"`);
         }
     
     // 使用された変数を追跡
