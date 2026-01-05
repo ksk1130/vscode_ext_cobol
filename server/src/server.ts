@@ -120,10 +120,7 @@ connection.onInitialized(async () => {
  * 設定変更時の処理
  */
 connection.onDidChangeConfiguration(async change => {
-    if (hasConfigurationCapability) {
-        // 設定をリセット
-        globalSettings = defaultSettings;
-    } else {
+    if (!hasConfigurationCapability) {
         globalSettings = <CobolSettings>(
             (change.settings.cobol || defaultSettings)
         );
@@ -132,6 +129,20 @@ connection.onDidChangeConfiguration(async change => {
     // 設定が変更されたらリゾルバーを再初期化
     await updateConfiguration();
 });
+
+/**
+ * 相対パスを絶対パスに解決するヘルパー関数
+ */
+function resolveConfiguredPaths(paths: string[]): string[] {
+    return paths.map(p => {
+        if (workspaceRoot && p.startsWith('./')) {
+            return path.join(workspaceRoot, p.substring(2));
+        } else if (workspaceRoot && !path.isAbsolute(p)) {
+            return path.join(workspaceRoot, p);
+        }
+        return p;
+    });
+}
 
 /**
  * 設定を取得してリゾルバーを更新する
@@ -153,17 +164,9 @@ async function updateConfiguration() {
     }
     
     // 設定値に基づいてCopybookResolverを初期化/再初期化
-    const searchPaths = globalSettings.copybookPaths.map(p => {
-        if (workspaceRoot && p.startsWith('./')) {
-            return path.join(workspaceRoot, p.substring(2));
-        } else if (workspaceRoot && !path.isAbsolute(p)) {
-            return path.join(workspaceRoot, p);
-        }
-        return p;
-    }).concat([
-        // cobol標準のCOPYBOOKパス
-        process.env.COBOL_COPYPATH || ''
-    ]).filter(p => p);
+    const searchPaths = resolveConfiguredPaths(globalSettings.copybookPaths)
+        .concat(process.env.COBOL_COPYPATH ? [process.env.COBOL_COPYPATH] : [])
+        .filter(p => p);
     
     copybookResolver = new CopybookResolver({
         searchPaths: searchPaths,
@@ -1067,14 +1070,7 @@ function getCopybookCompletions(document: TextDocument): CompletionItem[] {
     
     try {
         // 設定から COPYBOOK 検索パスを取得
-        const configuredPaths = globalSettings.copybookPaths.map(p => {
-            if (workspaceRoot && p.startsWith('./')) {
-                return path.join(workspaceRoot, p.substring(2));
-            } else if (workspaceRoot && !path.isAbsolute(p)) {
-                return path.join(workspaceRoot, p);
-            }
-            return p;
-        });
+        const configuredPaths = resolveConfiguredPaths(globalSettings.copybookPaths);
         
         const searchPaths = [
             sourceFileDir,
