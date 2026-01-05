@@ -722,8 +722,9 @@ function handleCopybookJump(document: TextDocument, line: string): Definition | 
  */
 function handlePerformJump(document: TextDocument, line: string): Definition | null {
     // PERFORM の後ろの単語を抽出
-    // 日本語を含むUnicode文字をサポート: [\w\u0080-\uFFFF\-]+
-    const paragraphMatch = line.match(/PERFORM\s+([\w\u0080-\uFFFF\-]+)/i);
+    // 日本語を含むUnicode文字をサポート: [\w\u0080-\uFFFF\-ー－]+
+    // \- = ASCII hyphen (U+002D), ー = katakana prolonged sound mark (U+30FC), － = full-width minus (U+FF0D)
+    const paragraphMatch = line.match(/PERFORM\s+([\w\u0080-\uFFFF\-ー－]+)/i);
     if (!paragraphMatch) return null;
     
     const paragraphName = paragraphMatch[1];
@@ -854,7 +855,7 @@ function searchInCopybooksWithPath(document: TextDocument, word: string): { symb
                     const escapedTo = rule.to.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
                     // - (U+002D): ASCII hyphen
                     // ー (U+30FC): Full-width katakana prolonged sound mark (Shift-JIS 817C)
-                    const regex = new RegExp(`^${escapedTo}([-ー][\w\u0080-\uFFFF\-ー]+)$`, 'i');
+                    const regex = new RegExp(`^${escapedTo}([-ー－][\w\u0080-\uFFFF\-ー－]+)$`, 'i');
                     connection.console.log(`[DEBUG-PREFIX] PREFIX rule: from="${rule.from}" to="${rule.to}"`);
                     connection.console.log(`[DEBUG-PREFIX] PREFIX regex pattern: ${regex.source}`);
                     connection.console.log(`[DEBUG-PREFIX] Testing regex against: "${searchWord}"`);
@@ -958,7 +959,7 @@ function searchInCopybooks(document: TextDocument, word: string): Definition | n
                     const escapedTo = rule.to.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
                     // - (U+002D): ASCII hyphen
                     // ー (U+30FC): Full-width katakana prolonged sound mark (Shift-JIS 817C)
-                    const regex = new RegExp(`^${escapedTo}([-ー][\w\u0080-\uFFFF\-ー]+)$`, 'i');
+                    const regex = new RegExp(`^${escapedTo}([-ー－][\w\u0080-\uFFFF\-ー－]+)$`, 'i');
                     connection.console.log(`[DEBUG-PREFIX] PREFIX rule: from="${rule.from}" to="${rule.to}"`);
                     connection.console.log(`[DEBUG-PREFIX] PREFIX regex pattern: ${regex.source}`);
                     connection.console.log(`[DEBUG-PREFIX] Testing regex against: "${searchWord}"`);
@@ -1020,8 +1021,8 @@ function getWordAtPosition(document: TextDocument, position: Position): string |
         end: { line: position.line, character: 1000 }
     });
     
-    // 日本語を含むUnicode文字をサポート: [\w\u0080-\uFFFF\-]+
-    const words = line.match(/[\w\u0080-\uFFFF\-]+/gi);
+    // 日本語を含むUnicode文字をサポート: [\w\u0080-\uFFFF\-ー－]+
+    const words = line.match(/[\w\u0080-\uFFFF\-ー－]+/gi);
     if (!words) return null;
     
     let currentPos = 0;
@@ -1505,8 +1506,8 @@ function validateDocument(document: TextDocument): void {
         // MOVE文の型・サイズチェック
         if (normalizedLine.includes('MOVE') && normalizedLine.includes('TO')) {
             // 修飾名（RECORD.FIELD）と単純名の両方をサポートし、末尾のピリオドは除外
-            // 日本語を含むUnicode文字をサポート: [\w\u0080-\uFFFF\-]+
-            const moveMatch = contentLine.match(/MOVE\s+([\w\u0080-\uFFFF\-]+(?:\.[\w\u0080-\uFFFF\-]+)*)\s+TO\s+([\w\u0080-\uFFFF\-]+(?:\.[\w\u0080-\uFFFF\-]+)*)/i);
+            // 日本語を含むUnicode文字をサポート: [\w\u0080-\uFFFF\-ー－]+
+            const moveMatch = contentLine.match(/MOVE\s+([\w\u0080-\uFFFF\-ー－]+(?:\.[\w\u0080-\uFFFF\-ー－]+)*)\s+TO\s+([\w\u0080-\uFFFF\-ー－]+(?:\.[\w\u0080-\uFFFF\-ー－]+)*)/i);
             if (moveMatch) {
                 const sourceName = moveMatch[1];
                 const targetName = moveMatch[2];
@@ -1569,9 +1570,9 @@ function validateDocument(document: TextDocument): void {
         }
         
         // MOVE, ADD, COMPUTE, IF, EVALUATE などで使用される変数を抽出
-        // 日本語を含むUnicode文字をサポート: [\w\u0080-\uFFFF\-]+
+        // 日本語を含むUnicode文字をサポート: [\w\u0080-\uFFFF\-ー－]+
         // 注: \b（単語境界）はUnicode文字で正しく動作しないため使用しない
-        const words = contentLine.match(/[\w\u0080-\uFFFF\-]+/gi);
+        const words = contentLine.match(/[\w\u0080-\uFFFF\-ー－]+/gi);
         if (!words) continue;
         
         for (const word of words) {

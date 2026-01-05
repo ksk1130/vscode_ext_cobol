@@ -151,8 +151,9 @@ export class SymbolIndex {
             // DATA DIVISION内の変数定義
             if (inDataDivision) {
                 // COBOL形式: column 1-7は無視、column 8以降のコード領域をパース
-                // 日本語を含むUnicode文字をサポート: [\w\u0080-\uFFFF\-]+
-                const varMatch = contentArea.match(/^\s*(\d{2})\s+([\w\u0080-\uFFFF\-]+)(\s+PIC\s+([^\s. ]+))?/i);
+                // 日本語を含むUnicode文字をサポート: [\w\u0080-\uFFFF\-ー－]+
+                // \- = ASCII hyphen (U+002D), ー = katakana prolonged sound mark (U+30FC), － = full-width minus (U+FF0D)
+                const varMatch = contentArea.match(/^\s*(\d{2})\s+([\w\u0080-\uFFFF\-ー－]+)(\s+PIC\s+([^\s. ]+))?/i);
                 if (varMatch) {
                     const levelNum = parseInt(varMatch[1]);
                     // 88レベルは条件名として別途処理されるため、ここではスキップ
@@ -171,8 +172,9 @@ export class SymbolIndex {
                 }
                 
                 // 88 レベルの条件名も抽出（VALUE 句の有無は無視）
-                // 日本語を含むUnicode文字をサポート: [\w\u0080-\uFFFF\-]+
-                const condMatch = contentArea.match(/^\s*88\s+([\w\u0080-\uFFFF\-]+)/i);
+                // 日本語を含むUnicode文字をサポート: [\w\u0080-\uFFFF\-ー－]+
+                // \- = ASCII hyphen (U+002D), ー = katakana prolonged sound mark (U+30FC), － = full-width minus (U+FF0D)
+                const condMatch = contentArea.match(/^\s*88\s+([\w\u0080-\uFFFF\-ー－]+)/i);
                 if (condMatch) {
                     const columnInContent = contentArea.indexOf(condMatch[1]);
                     symbols.push({
@@ -193,8 +195,8 @@ export class SymbolIndex {
                 }
                 
                 // パラグラフ:  カラム8から始まり、ピリオドで終わる
-                // 日本語を含むUnicode文字をサポート: [\w\u0080-\uFFFF\-]+
-                const paraMatch = contentArea.match(/^\s*([\w\u0080-\uFFFF\-]+)\./i);
+                // 日本語を含むUnicode文字をサポート: [\w\u0080-\uFFFF\-ー－]+
+                const paraMatch = contentArea.match(/^\s*([\w\u0080-\uFFFF\-ー－]+)\./i);
                 if (paraMatch && !contentArea.toUpperCase().includes('SECTION')) {
                     const paraName = paraMatch[1].toUpperCase();
                     
@@ -210,8 +212,8 @@ export class SymbolIndex {
                 }
                 
                 // セクション
-                // 日本語を含むUnicode文字をサポート: [\w\u0080-\uFFFF\-]+
-                const sectionMatch = contentArea.match(/^\s*([\w\u0080-\uFFFF\-]+)\s+SECTION/i);
+                // 日本語を含むUnicode文字をサポート: [\w\u0080-\uFFFF\-ー－]+
+                const sectionMatch = contentArea.match(/^\s*([\w\u0080-\uFFFF\-ー－]+)\s+SECTION/i);
                 if (sectionMatch) {
                     symbols.push({
                         name: sectionMatch[1],

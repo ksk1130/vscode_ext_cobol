@@ -63,8 +63,8 @@ export class ProgramResolver {
         }
         
         // 動的CALLの場合は変数名を返す
-        // 日本語を含むUnicode文字をサポート: [\w\u0080-\uFFFF\-]+
-        const dynamicMatch = line.match(/CALL\s+([\w\u0080-\uFFFF\-]+)/i);
+        // 日本語を含むUnicode文字をサポート: [\w\u0080-\uFFFF\-ー－]+
+        const dynamicMatch = line.match(/CALL\s+([\w\u0080-\uFFFF\-ー－]+)/i);
         if (dynamicMatch) {
             return dynamicMatch[1];  // 変数名（後で値を追跡）
         }
@@ -83,8 +83,8 @@ export class ProgramResolver {
         
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i];
-            // 日本語を含むUnicode文字をサポート: [\w\u0080-\uFFFF\-]+
-            const match = line.match(/PROGRAM-ID\.\s+([\w\u0080-\uFFFF\-]+)/i);
+            // 日本語を含むUnicode文字をサポート: [\w\u0080-\uFFFF\-ー－]+
+            const match = line.match(/PROGRAM-ID\.\s+([\w\u0080-\uFFFF\-ー－]+)/i);
             
             if (match) {
                 // IS COMMON/IS INITIAL などのチェック

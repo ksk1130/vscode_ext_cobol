@@ -169,7 +169,7 @@ export class CopybookResolver {
                 // 行頭またはスペース・ピリオドの後に接頭辞があり、その後にハイフン(- or ー)が続くパターン
                 // - (U+002D): ASCII hyphen
                 // ー (U+30FC): Full-width katakana prolonged sound mark (Shift-JIS 817C)
-                const regex = new RegExp(`(^|\\s|\\.)${escapedFrom}([-ー][\\w\\u0080-\\uFFFF\\-ー]+)`, 'gi');
+                const regex = new RegExp(`(^|\\s|\\.)${escapedFrom}([-ー－][\\w\\u0080-\\uFFFF\\-ー－]+)`, 'gi');
                 result = result.replace(regex, `$1${rule.to}$2`);
             } else {
                 // 通常の単語置換（REPLACING）
