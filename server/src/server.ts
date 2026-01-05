@@ -585,7 +585,8 @@ function handleCopybookJump(document: TextDocument, line: string): Definition | 
  */
 function handlePerformJump(document: TextDocument, line: string): Definition | null {
     // PERFORM の後ろの単語を抽出
-    const paragraphMatch = line.match(/PERFORM\s+([A-Z0-9\-]+)/i);
+    // 日本語を含むUnicode文字をサポート: [\w\u0080-\uFFFF\-]+
+    const paragraphMatch = line.match(/PERFORM\s+([\w\u0080-\uFFFF\-]+)/i);
     if (!paragraphMatch) return null;
     
     const paragraphName = paragraphMatch[1];
@@ -770,15 +771,16 @@ function getWordAtPosition(document: TextDocument, position: Position): string |
         end: { line: position.line, character: 1000 }
     });
     
-    const words = line.match(/[A-Z0-9\-]+/gi);
+    // 日本語を含むUnicode文字をサポート: [\w\u0080-\uFFFF\-]+
+    const words = line.match(/[\w\u0080-\uFFFF\-]+/gi);
     if (!words) return null;
     
     let currentPos = 0;
     for (const word of words) {
         const wordStart = line.indexOf(word, currentPos);
-        const wordEnd = wordStart + word. length;
+        const wordEnd = wordStart + word.length;
         
-        if (position.character >= wordStart && position. character <= wordEnd) {
+        if (position.character >= wordStart && position.character <= wordEnd) {
             return word;
         }
         
@@ -1254,7 +1256,8 @@ function validateDocument(document: TextDocument): void {
         // MOVE文の型・サイズチェック
         if (normalizedLine.includes('MOVE') && normalizedLine.includes('TO')) {
             // 修飾名（RECORD.FIELD）と単純名の両方をサポートし、末尾のピリオドは除外
-            const moveMatch = contentLine.match(/MOVE\s+([A-Z0-9\-]+(?:\.[A-Z0-9\-]+)*)\s+TO\s+([A-Z0-9\-]+(?:\.[A-Z0-9\-]+)*)/i);
+            // 日本語を含むUnicode文字をサポート: [\w\u0080-\uFFFF\-]+
+            const moveMatch = contentLine.match(/MOVE\s+([\w\u0080-\uFFFF\-]+(?:\.[\w\u0080-\uFFFF\-]+)*)\s+TO\s+([\w\u0080-\uFFFF\-]+(?:\.[\w\u0080-\uFFFF\-]+)*)/i);
             if (moveMatch) {
                 const sourceName = moveMatch[1];
                 const targetName = moveMatch[2];
@@ -1317,7 +1320,8 @@ function validateDocument(document: TextDocument): void {
         }
         
         // MOVE, ADD, COMPUTE, IF, EVALUATE などで使用される変数を抽出
-        const words = contentLine.match(/\b[A-Z][A-Z0-9\-]+\b/gi);
+        // 日本語を含むUnicode文字をサポート: [\w\u0080-\uFFFF\-]+
+        const words = contentLine.match(/\b[\w\u0080-\uFFFF\-]+\b/gi);
         if (!words) continue;
         
         for (const word of words) {
