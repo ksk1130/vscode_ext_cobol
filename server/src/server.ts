@@ -356,7 +356,8 @@ connection.onDefinition((params: DefinitionParams): Definition | null => {
     
     // 1. COPYBOOKの参照ジャンプ
     // Use regex to match COPY followed by whitespace to avoid matching COPYBOOK, COPY-FILE, etc.
-    if (/^COPY\s+/i.test(normalizedLine)) {
+    // Support COPY anywhere in the line (e.g., after FD declaration)
+    if (/\bCOPY\s+/i.test(normalizedLine)) {
         return handleCopybookJump(document, contentLine);
     }
     
