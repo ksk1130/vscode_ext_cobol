@@ -20,7 +20,7 @@
       "patterns": [
         {
           "name": "constant.character.escape.cobol",
-          "match": "\\\\\""
+          "match": "\"\""
         }
       ]
     },
@@ -31,7 +31,7 @@
       "patterns": [
         {
           "name": "constant.character.escape.cobol",
-          "match": "\\\\'"
+          "match": "''"
         }
       ]
     },
