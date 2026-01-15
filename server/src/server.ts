@@ -95,6 +95,7 @@ interface CobolSettings {
     programSearchPaths: string[];
     fileExtensions: string[];
     copybookExtensions: string[];
+    enableWarnings: boolean;
 }
 
 const connection = createConnection(ProposedFeatures.all);
@@ -114,7 +115,8 @@ const defaultSettings: CobolSettings = {
     programSearchPaths: [],
     fileExtensions: ['.cob', '.COB', '.cbl', '.CBL', '.cobol', '.COBOL'],
     // Include .cpy variants so COPY 社員マスター resolves even when configuration is unavailable
-    copybookExtensions: ['.cpy', '.CPY', '.cbl', '.CBL', '']
+    copybookExtensions: ['.cpy', '.CPY', '.cbl', '.CBL', ''],
+    enableWarnings: true
 };
 
 let globalSettings: CobolSettings = defaultSettings;
@@ -237,6 +239,9 @@ connection.onDidChangeConfiguration(async change => {
     
     // 設定が変更されたらリゾルバーを再初期化
     await updateConfiguration();
+    
+    // すべてのドキュメントを再検証
+    documents.all().forEach(validateDocument);
 });
 
 /**
@@ -264,7 +269,8 @@ async function updateConfiguration() {
                 copybookPaths: config.copybookPaths || defaultSettings.copybookPaths,
                 programSearchPaths: config.programSearchPaths || defaultSettings.programSearchPaths,
                 fileExtensions: config.fileExtensions || defaultSettings.fileExtensions,
-                copybookExtensions: config.copybookExtensions || defaultSettings.copybookExtensions
+                copybookExtensions: config.copybookExtensions || defaultSettings.copybookExtensions,
+                enableWarnings: config.enableWarnings !== undefined ? config.enableWarnings : defaultSettings.enableWarnings
             };
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : String(err);
@@ -1604,6 +1610,12 @@ function checkTypeCompatibility(sourceInfo: PictureInfo, targetInfo: PictureInfo
  * @param document 診断対象ドキュメント
  */
 function validateDocument(document: TextDocument): void {
+    // 警告機能が無効な場合はスキップ
+    if (!globalSettings.enableWarnings) {
+        connection.sendDiagnostics({ uri: document.uri, diagnostics: [] });
+        return;
+    }
+    
     // COPYBOOK（.cpy）ファイルは診断をスキップ
     const isCopybook = /\.cpy$/i.test(document.uri);
     if (isCopybook) {
