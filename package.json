@@ -98,6 +98,11 @@
           "type": "boolean",
           "default": true,
           "description": "COBOLファイルで7, 8, 12列目に縦線(ルーラー)を表示する"
+        },
+        "cobol.enableWarnings": {
+          "type": "boolean",
+          "default": true,
+          "description": "型チェックなどの警告を有効にする"
         }
       }
     }
