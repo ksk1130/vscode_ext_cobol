@@ -374,7 +374,7 @@ connection.onDefinition((params: DefinitionParams): Definition | null => {
     
     // 3. CALLの参照ジャンプ
     if (normalizedLine.includes('CALL')) {
-        return handleProgramCallJump(document, contentLine);
+        return handleProgramCallJump(document, contentLine, params.position.line);
     }
     
     // 4. 変数の定義ジャンプ
@@ -897,10 +897,23 @@ function handlePerformJump(document: TextDocument, line: string): Definition | n
  * CALL文の呼び出し先プログラムをワークスペースから解決する。
  * @param document 現在のドキュメント
  * @param line CALL行のテキスト
+ * @param lineNumber オプション: ドキュメント内の行番号（複数行対応用）
  * @returns ジャンプ先の位置。見つからない場合は null。
  */
-function handleProgramCallJump(document: TextDocument, line: string): Definition | null {
-    const programName = programResolver.extractCalledProgram(line);
+function handleProgramCallJump(document: TextDocument, line: string, lineNumber?: number): Definition | null {
+    let programName: string | null = null;
+
+    // lineNumber が指定された場合は複数行対応の処理を試みる
+    if (lineNumber !== undefined) {
+        const lines = document.getText().split('\n');
+        programName = programResolver.extractCalledProgramMultiLine(lines, lineNumber);
+    }
+
+    // 複数行処理で見つからなかった場合は単一行処理にフォールバック
+    if (!programName) {
+        programName = programResolver.extractCalledProgram(line);
+    }
+
     if (!programName) return null;
     
     // ワークスペース内のプログラムをインデックス化

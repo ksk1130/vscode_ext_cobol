@@ -157,6 +157,61 @@ export class ProgramResolver {
         
         return null;
     }
+
+    /**
+     * 複数行にわたるCALL文からプログラム名を抽出
+     * @param lines ドキュメントの全行
+     * @param startLineIndex CALL文が開始する行のインデックス
+     * @returns プログラム名またはnull
+     */
+    extractCalledProgramMultiLine(lines: string[], startLineIndex: number): string | null {
+        if (startLineIndex < 0 || startLineIndex >= lines.length) {
+            return null;
+        }
+
+        // CALL文が始まる行から、END-CALLまたはステートメント終了まで行を連結
+        let concatenated = '';
+        let foundCALL = false;
+        let parenthesisBalance = 0; // 括弧のバランス追跡
+
+        for (let i = startLineIndex; i < lines.length && i < startLineIndex + 50; i++) {
+            const line = lines[i];
+            
+            // シーケンス領域（7文字目まで）を削除して処理
+            const contentLine = line.length > 7 ? line.substring(7) : line;
+            concatenated += ' ' + contentLine;
+
+            if (contentLine.toUpperCase().includes('CALL')) {
+                foundCALL = true;
+            }
+
+            if (foundCALL) {
+                // 括弧のバランスを追跡
+                for (const char of contentLine) {
+                    if (char === '(') parenthesisBalance++;
+                    if (char === ')') parenthesisBalance--;
+                }
+
+                // ステートメント終了のシグナル: END-CALL
+                if (contentLine.toUpperCase().includes('END-CALL')) {
+                    break;
+                }
+
+                // ピリオド（文末）が見つかり、括弧が閉じている場合
+                // COBOL では文末のピリオドが重要なため、USING句内にピリオドがないと仮定
+                if (contentLine.trim().endsWith('.') && parenthesisBalance === 0) {
+                    break;
+                }
+            }
+        }
+
+        if (!foundCALL) {
+            return null;
+        }
+
+        // 連結された文字列から、単一行で処理できるパターンで抽出
+        return this.extractCalledProgram(concatenated);
+    }
     
     /**
      * PROGRAM-IDを抽出
