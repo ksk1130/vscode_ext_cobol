@@ -131,7 +131,6 @@ let symbolIndex = new SymbolIndex(
 );
 let workspaceRoot: string | null = null;
 let hasConfigurationCapability = false;
-let hasWorkspaceFolderCapability = false;
 const copybooksLoadedForDocument = new Set<string>();
 const programRootsIndexed = new Set<string>();
 
@@ -168,9 +167,6 @@ connection.onInitialize(async (params:  InitializeParams) => {
     const capabilities = params.capabilities;
     hasConfigurationCapability = !!(
         capabilities.workspace && !!capabilities.workspace.configuration
-    );
-    hasWorkspaceFolderCapability = !!(
-        capabilities.workspace && !!capabilities.workspace.workspaceFolders
     );
     
     return {
@@ -650,7 +646,6 @@ function convertToDocumentSymbols(symbols: SymbolInfo[], document: TextDocument)
     // まず Division を処理
     for (const symbol of symbols) {
         if (symbol.type === 'division') {
-            const lineText = lines[symbol.line] || '';
             const endLine = symbol.endLine !== undefined ? symbol.endLine : lines.length - 1;
             const endLineText = lines[endLine] || '';
             const endLineLength = endLineText.length;
@@ -728,7 +723,7 @@ function convertToDocumentSymbols(symbols: SymbolInfo[], document: TextDocument)
         
         // このシンボルが属する Division を特定
         let belongsToDivision: DocumentSymbol | null = null;
-        for (const [divName, divInfo] of divisions.entries()) {
+        for (const [, divInfo] of divisions.entries()) {
             if (symbol.line >= divInfo.startLine && symbol.line <= divInfo.endLine) {
                 belongsToDivision = divInfo.symbol;
                 break;
@@ -1119,115 +1114,6 @@ function searchInCopybooksWithPath(document: TextDocument, word: string): { symb
         if (copybookSymbol) {
             logger.debug(`[Parse-COPYBOOK] ✓ Symbol found! line=${copybookSymbol.line}, col=${copybookSymbol.column}`);
             return { symbol: copybookSymbol, copybookPath };
-        } else {
-            logger.debug(`[Parse-COPYBOOK] ✗ Symbol NOT found in this copybook`);
-        }
-    }
-    
-    logger.debug(`[Parse-COPYBOOK] Symbol "${word}" not found in any copybook`);
-    return null;
-}
-
-/**
- * COPYで参照されているコピーブック内の記号を検索する。
- * @param document 現在のドキュメント
- * @param word 検索対象のシンボル名
- * @returns 定義位置。見つからない場合は null。
- */
-function searchInCopybooks(document: TextDocument, word: string): Definition | null {
-    const text = document.getText();
-    const lines = text.split('\n');
-    const sourceFileDir = path.dirname(URI.parse(document.uri).fsPath);
-    
-    const resolver = ensureCopybookResolver();
-    
-    logger.debug(`[Parse-COPYBOOK] searchInCopybooks() called with word: "${word}"`);
-    
-    // 複数行にわたるCOPY文を結合
-    const copyStatements = collectCopyStatements(lines);
-    logger.debug(`[Parse-COPYBOOK] Found ${copyStatements.length} COPY statements`);
-
-    for (const {statement: contentLine} of copyStatements) {
-        logger.debug(`[Parse-COPYBOOK] Processing COPY statement: "${contentLine.substring(0, 100)}..."`);
-        
-        // COPY 文から COPYBOOK 名と REPLACING ルールを抽出
-        const copybookInfo = resolver.extractCopybookInfo(contentLine);
-        if (!copybookInfo.name) {
-            logger.debug(`[Parse-COPYBOOK] No copybook name found, skipping`);
-            continue;
-        }
-        
-        logger.debug(`[Parse-COPYBOOK] Copybook name: "${copybookInfo.name}"`);
-        logger.debug(`[Parse-COPYBOOK] Replacing rules: ${JSON.stringify(copybookInfo.replacing)}`);
-        
-        const copybookPath = resolver.resolveCopybook(copybookInfo.name, sourceFileDir);
-        if (!copybookPath) {
-            logger.debug(`[Parse-COPYBOOK] Copybook path not resolved, skipping`);
-            continue;
-        }
-        
-        logger.debug(`[Parse-COPYBOOK] Copybook path: "${copybookPath}"`);
-        
-        // コピーブックのドキュメントを取得して記号を検索
-        const copybookUri = URI.file(copybookPath).toString();
-        
-        // REPLACING が適用された記号名で検索
-        let searchWord = word;
-        if (copybookInfo.replacing.length > 0) {
-            logger.debug(`[Parse-COPYBOOK] Applying reverse transformation...`);
-            logger.debug(`[Parse-COPYBOOK] Original word: "${searchWord}"`);
-            
-            // 逆変換：現在のコード内の名前 → COPYBOOK 内の元の名前
-            for (const rule of copybookInfo.replacing) {
-                const beforeTransform = searchWord;
-                
-                if (rule.isPrefix) {
-                    // 接頭辞置換の逆変換
-                    // 例: FUGA-変数 → HOGE-変数, FUGAー変数 → HOGEー変数
-                    const escapedTo = rule.to.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                    // - (U+002D): ASCII hyphen
-                    // ー (U+30FC): Full-width katakana prolonged sound mark (Shift-JIS 817C)
-                    const regex = new RegExp(`^${escapedTo}([-ー－][\w\u0080-\uFFFF\-ー－]+)$`, 'i');
-                    logger.debug(`[Parse-COPYBOOK] PREFIX rule: from="${rule.from}" to="${rule.to}"`);
-                    logger.debug(`[Parse-COPYBOOK] PREFIX regex pattern: ${regex.source}`);
-                    logger.debug(`[Parse-COPYBOOK] Testing regex against: "${searchWord}"`);
-                    
-                    const match = searchWord.match(regex);
-                    if (match) {
-                        logger.debug(`[Parse-COPYBOOK] Regex matched! Groups: ${JSON.stringify(match)}`);
-                    } else {
-                        logger.debug(`[Parse-COPYBOOK] Regex did NOT match`);
-                    }
-                    
-                    searchWord = searchWord.replace(regex, `${rule.from}$1`);
-                } else {
-                    // 通常の単語置換の逆変換
-                    const escapedTo = rule.to.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                    const regex = new RegExp(`^${escapedTo}$`, 'i');
-                    logger.debug(`[Parse-COPYBOOK] WORD rule: from="${rule.from}" to="${rule.to}"`);
-                    logger.debug(`[Parse-COPYBOOK] WORD regex pattern: ${regex.source}`);
-                    searchWord = searchWord.replace(regex, rule.from);
-                }
-                
-                if (beforeTransform !== searchWord) {
-                    logger.debug(`[Parse-COPYBOOK] Transformed: "${beforeTransform}" → "${searchWord}"`);
-                } else {
-                    logger.debug(`[Parse-COPYBOOK] No transformation applied (word unchanged)`);
-                }
-            }
-            
-            logger.debug(`[Parse-COPYBOOK] Final search word after all transformations: "${searchWord}"`);
-        }
-        
-        logger.debug(`[Parse-COPYBOOK] Searching for symbol "${searchWord}" in copybook "${copybookUri}"`);
-        const copybookSymbol = symbolIndex.findSymbol(copybookUri, searchWord);
-        
-        if (copybookSymbol) {
-            logger.debug(`[Parse-COPYBOOK] ✓ Symbol found! line=${copybookSymbol.line}, col=${copybookSymbol.column}`);
-            return Location.create(
-                copybookUri,
-                Range.create(copybookSymbol.line, copybookSymbol.column, copybookSymbol.line, copybookSymbol.column + searchWord.length)
-            );
         } else {
             logger.debug(`[Parse-COPYBOOK] ✗ Symbol NOT found in this copybook`);
         }
