@@ -144,6 +144,7 @@ VS Code の設定（settings.json）で以下をカスタマイズできます�
 - **cobol.copybookExtensions**: COPYBOOKファイルの拡張子（配列）
   - デフォルト: `[".cpy", ".CPY", ".cbl", ".CBL", ""]`
   - 空文字列 `""` は拡張子なしのファイルを許可します
+  - 同名COPYBOOKが複数ある場合は、ソース同階層 → `cobol.copybookPaths` の順 → `cobol.copybookExtensions` の順で最初に見つかったものが採用されます
   
 - **cobol.programSearchPaths**: COBOLプログラム検索パス（配列）
   - デフォルト: `["./src", "./programs", "./SRC"]`

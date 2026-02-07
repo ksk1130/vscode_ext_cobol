@@ -136,6 +136,11 @@ export async function activate(context: ExtensionContext) {
     });
     context.subscriptions.push(loadCopybooksCommand);
 
+    const openSettingsCommand = commands.registerCommand('cobol.openSettings', async () => {
+        await commands.executeCommand('workbench.action.openSettings', 'cobol');
+    });
+    context.subscriptions.push(openSettingsCommand);
+
     // ステータスバーに表示
     window.setStatusBarMessage('cobol LSP: Active', 3000);
 
