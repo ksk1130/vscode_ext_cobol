@@ -112,6 +112,11 @@ export async function activate(context: ExtensionContext) {
         loadedCopybooks: number;
     }
 
+    interface ReloadProgramIndexResult {
+        indexedPrograms: number;
+        indexedRoots: number;
+    }
+
     const loadCopybooksCommand = commands.registerCommand('cobol.loadCopybooks', async () => {
         const editor = window.activeTextEditor;
         if (!editor) {
@@ -135,6 +140,23 @@ export async function activate(context: ExtensionContext) {
         }
     });
     context.subscriptions.push(loadCopybooksCommand);
+
+    const reloadProgramIndexCommand = commands.registerCommand('cobol.reloadProgramIndex', async () => {
+        const editor = window.activeTextEditor;
+        const documentUri = editor?.document?.uri?.toString();
+
+        try {
+            const response = await client.sendRequest<ReloadProgramIndexResult>('cobol/reloadProgramIndex', {
+                documentUri
+            });
+            const programs = response?.indexedPrograms ?? 0;
+            const roots = response?.indexedRoots ?? 0;
+            window.showInformationMessage(`Reloaded program index: ${programs} program(s) from ${roots} root(s).`);
+        } catch (err) {
+            window.showErrorMessage(`Failed to reload program index: ${err}`);
+        }
+    });
+    context.subscriptions.push(reloadProgramIndexCommand);
 
     const openSettingsCommand = commands.registerCommand('cobol.openSettings', async () => {
         await commands.executeCommand('workbench.action.openSettings', 'cobol');

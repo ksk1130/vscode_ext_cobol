@@ -16,6 +16,7 @@
 - **[outline-example.cbl](#outline-examplecbl)** - アウトラインビュー デモ
 - **[special-constants-test.cbl](#special-constants-testcbl)** - 特殊定数テスト
 - **[qualified-name-test.cbl](#qualified-name-testcbl)** - 定義済み名テスト
+- **call-jump-main.cbl / call-jump-sub.cbl** - CALLジャンプの基本デモ
 
 ### COPY関連テスト（エッジケース）
 
@@ -207,6 +208,18 @@ COBOL の特殊定数（ZERO, SPACE, LOW-VALUE, HIGH-VALUE など）をテスト
 ## qualified-name-test.cbl
 
 ネストされたデータ構造での定義済み名（修飾名）テストファイルです。
+
+---
+
+## call-jump-main.cbl / call-jump-sub.cbl
+
+CALL文から外部プログラムへジャンプする動作確認用の最小サンプルです。
+
+### 使い方
+
+1. `Cobol: Program Search Paths` に `./examples` を追加
+2. call-jump-main.cbl を開く
+3. `CALL 'CALL-JUMP-SUB'` を Ctrl+Click → call-jump-sub.cbl の PROGRAM-ID にジャンプ
 
 ---
 

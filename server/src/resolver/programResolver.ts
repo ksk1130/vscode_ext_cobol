@@ -259,6 +259,13 @@ export class ProgramResolver {
     getAllPrograms(): ProgramInfo[] {
         return Array.from(this.programIndex.values());
     }
+
+    /**
+     * インデックスをクリアする
+     */
+    clearIndex(): void {
+        this.programIndex.clear();
+    }
     
     /**
      * ワークスペース内のCOBOLファイルを再帰的に検索

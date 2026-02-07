@@ -133,6 +133,7 @@ let workspaceRoot: string | null = null;
 let hasConfigurationCapability = false;
 let hasWorkspaceFolderCapability = false;
 const copybooksLoadedForDocument = new Set<string>();
+const programRootsIndexed = new Set<string>();
 
 /**
  * CopybookResolverを取得する。
@@ -236,6 +237,53 @@ function resolveConfiguredPaths(paths: string[]): string[] {
 }
 
 /**
+ * プログラム検索対象のルートパスを取得する
+ * @param sourceFileDir 呼び出し元ファイルのディレクトリ（任意）
+ */
+function getProgramSearchRoots(sourceFileDir?: string): string[] {
+    const roots: string[] = [];
+
+    if (sourceFileDir) {
+        roots.push(sourceFileDir);
+    }
+
+    const configuredRoots = resolveConfiguredPaths(globalSettings.programSearchPaths || [])
+        .filter(p => p);
+    roots.push(...configuredRoots);
+
+    if (roots.length === 0 && workspaceRoot) {
+        roots.push(workspaceRoot);
+    }
+
+    const uniqueRoots: string[] = [];
+    const seen = new Set<string>();
+    for (const root of roots) {
+        if (!seen.has(root)) {
+            seen.add(root);
+            uniqueRoots.push(root);
+        }
+    }
+
+    return uniqueRoots;
+}
+
+/**
+ * プログラム検索パスをインデックス化する
+ * @param roots 検索対象のルートパス
+ */
+function indexProgramRoots(roots: string[]): void {
+    for (const root of roots) {
+        if (!root || programRootsIndexed.has(root)) {
+            continue;
+        }
+        if (fs.existsSync(root)) {
+            programResolver.indexWorkspace(root);
+            programRootsIndexed.add(root);
+        }
+    }
+}
+
+/**
  * 設定を取得してリゾルバーを更新する
  */
 async function updateConfiguration() {
@@ -256,6 +304,8 @@ async function updateConfiguration() {
             globalSettings = defaultSettings;
         }
     }
+
+    programRootsIndexed.clear();
     
     // 設定値に基づいてCopybookResolverを再初期化
     const searchPaths = resolveConfiguredPaths(globalSettings.copybookPaths)
@@ -271,10 +321,8 @@ async function updateConfiguration() {
     symbolIndex.setCopybookExtensions(globalSettings.copybookExtensions);
     
     // Note: programResolverはモジュールレベルで初期化されており、再設定は不要 
-    // ワークスペースインデックス作成
-    if (workspaceRoot) {
-        programResolver.indexWorkspace(workspaceRoot);
-    }
+    // プログラム検索パスをインデックス化
+    indexProgramRoots(getProgramSearchRoots());
     
     logger.debug(`[updateConfiguration] Copybook search paths: ${searchPaths.join(', ')}`);
     logger.debug(`[updateConfiguration] Copybook extensions: ${globalSettings.copybookExtensions.join(', ')}`);
@@ -336,6 +384,8 @@ documents.onDidOpen(event => {
     symbolIndex.indexDocument(event.document);
     const allSymbols = symbolIndex.getAllSymbols(event.document.uri);
     logger.debug(`[onDidOpen] Document: ${event.document.uri.substring(event.document.uri.lastIndexOf('/'))}, Symbols: ${allSymbols.length}`);
+    const sourceFileDir = path.dirname(URI.parse(event.document.uri).fsPath);
+    indexProgramRoots(getProgramSearchRoots(sourceFileDir));
     if (shouldAutoLoadCopybooks()) {
         loadCopybooksOnce(event.document);
     }
@@ -924,17 +974,9 @@ function handleProgramCallJump(document: TextDocument, line: string, lineNumber?
 
     if (!programName) return null;
     
-    // ワークスペース内のプログラムをインデックス化
+    // プログラム検索パスをインデックス化
     const sourceFileDir = path.dirname(URI.parse(document.uri).fsPath);
-    // ワークスペースルートを推定（document の親ディレクトリから）
-    let workspaceDir = workspaceRoot;
-    if (!workspaceDir) {
-        // workspaceRoot が取得できない場合は、ドキュメント親ディレクトリを使用
-        workspaceDir = sourceFileDir;
-    }
-    
-    // ワークスペースをインデックス化（すでにインデックス済みであれば キャッシュが効く）
-    programResolver.indexWorkspace(workspaceDir);
+    indexProgramRoots(getProgramSearchRoots(sourceFileDir));
     
     const programInfo = programResolver.resolveProgram(programName);
     if (programInfo) {
@@ -1473,6 +1515,15 @@ interface LoadCopybooksResult {
     loadedCopybooks: number;
 }
 
+interface ReloadProgramIndexParams {
+    documentUri?: string;
+}
+
+interface ReloadProgramIndexResult {
+    indexedPrograms: number;
+    indexedRoots: number;
+}
+
 connection.onRequest('cobol/loadCopybooks', (params: LoadCopybooksParams): LoadCopybooksResult => {
     if (!params?.documentUri) {
         return { loadedCopybooks: 0 };
@@ -1488,6 +1539,26 @@ connection.onRequest('cobol/loadCopybooks', (params: LoadCopybooksParams): LoadC
 
     const refs = symbolIndex.getCopybookReferences(document.uri);
     return { loadedCopybooks: refs.length };
+});
+
+connection.onRequest('cobol/reloadProgramIndex', (params: ReloadProgramIndexParams): ReloadProgramIndexResult => {
+    let sourceFileDir: string | undefined;
+    if (params?.documentUri) {
+        const document = documents.get(params.documentUri);
+        if (document) {
+            sourceFileDir = path.dirname(URI.parse(document.uri).fsPath);
+        }
+    }
+
+    programRootsIndexed.clear();
+    programResolver.clearIndex();
+    const roots = getProgramSearchRoots(sourceFileDir);
+    indexProgramRoots(roots);
+
+    return {
+        indexedPrograms: programResolver.getAllPrograms().length,
+        indexedRoots: roots.length
+    };
 });
 
 documents.onDidClose(event => {
