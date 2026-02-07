@@ -16,6 +16,10 @@
       {
         "command": "cobol.loadCopybooks",
         "title": "COBOL: Load Copybooks for Current File"
+      },
+      {
+        "command": "cobol.openSettings",
+        "title": "COBOL: Open Settings"
       }
     ],
     "languages": [
@@ -51,6 +55,10 @@
       "properties": {
         "cobol.copybookPaths": {
           "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true,
           "default": [
             "./copybooks",
             "./copy",
@@ -60,6 +68,10 @@
         },
         "cobol.programSearchPaths": {
           "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true,
           "default": [
             "./src",
             "./programs",
@@ -69,6 +81,10 @@
         },
         "cobol.fileExtensions": {
           "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true,
           "default": [
             ".cbl",
             ".cob",
@@ -81,6 +97,10 @@
         },
         "cobol.copybookExtensions": {
           "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true,
           "default": [
             ".cpy",
             ".CPY",

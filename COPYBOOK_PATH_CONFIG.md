@@ -78,6 +78,28 @@ If not configured, the following defaults are used:
 }
 ```
 
+## 解決の優先順位 / Resolution Priority
+
+### 日本語
+
+同名COPYBOOKが複数パスに存在する場合、以下の順で**最初に見つかったもの**が採用されます：
+
+1. ソースファイルと同じディレクトリ
+2. `cobol.copybookPaths` に指定した順（環境変数 `COBOL_COPYPATH` は最後に追加）
+3. `cobol.copybookExtensions` に指定した拡張子順
+
+また、一度解決されたCOPYBOOK名はキャッシュされ、同名の別パスが後から追加されても再解決は行われません。
+
+### English
+
+When multiple COPYBOOKs share the same name, the **first match** is selected in the following order:
+
+1. The same directory as the source file
+2. The order of `cobol.copybookPaths` (the `COBOL_COPYPATH` environment variable is appended last)
+3. The order of extensions in `cobol.copybookExtensions`
+
+Once a COPYBOOK name is resolved, it is cached and will not be re-resolved even if another path is added later.
+
 ## 動的な設定変更 / Dynamic Configuration Changes
 
 設定を変更すると、自動的に COPYBOOK リゾルバーが再初期化され、新しいパスが使用されます：
