@@ -95,6 +95,7 @@ interface CobolSettings {
     programSearchPaths: string[];
     fileExtensions: string[];
     copybookExtensions: string[];
+    copybookAutoLoad: boolean;
     enableWarnings: boolean;
 }
 
@@ -116,6 +117,7 @@ const defaultSettings: CobolSettings = {
     fileExtensions: ['.cob', '.COB', '.cbl', '.CBL', '.cobol', '.COBOL'],
     // Include .cpy variants so COPY 社員マスター resolves even when configuration is unavailable
     copybookExtensions: ['.cpy', '.CPY', '.cbl', '.CBL', ''],
+    copybookAutoLoad: false,
     enableWarnings: true
 };
 
@@ -130,9 +132,11 @@ let symbolIndex = new SymbolIndex(
 let workspaceRoot: string | null = null;
 let hasConfigurationCapability = false;
 let hasWorkspaceFolderCapability = false;
+const copybooksLoadedForDocument = new Set<string>();
 
 /**
- * Ensure copybookResolver is initialized before use to avoid undefined access during early events.
+ * CopybookResolverを取得する。
+ * @returns CopybookResolverインスタンス
  */
 function ensureCopybookResolver(): CopybookResolver {
     if (copybookResolver) {
@@ -150,33 +154,6 @@ function ensureCopybookResolver(): CopybookResolver {
 
     logger.debug(`[ensureCopybookResolver] Created resolver with paths: ${searchPaths.join(', ')}`);
     return copybookResolver;
-}
-
-/**
- * COPYBOOK パス設定を解決する
- * @param copybookPaths 設定から取得したパス配列
- * @param workspaceRoot ワークスペースのルートパス
- * @returns 解決された絶対パス配列
- */
-function resolveCopybookPaths(copybookPaths: string[], workspaceRoot: string | null): string[] {
-    const resolvedPaths = copybookPaths.map(p => {
-        if (path.isAbsolute(p)) {
-            // 絶対パスの場合はそのまま使用
-            return p;
-        } else if (workspaceRoot) {
-            // 相対パスの場合はworkspaceRootを基準に解決
-            return path.resolve(workspaceRoot, p);
-        } else {
-            return p;
-        }
-    }).filter(p => p);
-    
-    // 環境変数 COBOL_COPYPATH があれば追加
-    if (process.env.COBOL_COPYPATH) {
-        resolvedPaths.push(process.env.COBOL_COPYPATH);
-    }
-    
-    return resolvedPaths;
 }
 
 /**
@@ -270,6 +247,7 @@ async function updateConfiguration() {
                 programSearchPaths: config.programSearchPaths || defaultSettings.programSearchPaths,
                 fileExtensions: config.fileExtensions || defaultSettings.fileExtensions,
                 copybookExtensions: config.copybookExtensions || defaultSettings.copybookExtensions,
+                copybookAutoLoad: config.copybookAutoLoad !== undefined ? config.copybookAutoLoad : defaultSettings.copybookAutoLoad,
                 enableWarnings: config.enableWarnings !== undefined ? config.enableWarnings : defaultSettings.enableWarnings
             };
         } catch (err) {
@@ -289,11 +267,10 @@ async function updateConfiguration() {
         extensions: globalSettings.copybookExtensions
     }, (message: string) => logger.debug(message));
     
-    // Update symbolIndex with new copybook extensions configuration
+    // ProgramResolverの設定更新
     symbolIndex.setCopybookExtensions(globalSettings.copybookExtensions);
     
-    // Note: programResolver is initialized at module level and doesn't need reconfiguration
-    
+    // Note: programResolverはモジュールレベルで初期化されており、再設定は不要 
     // ワークスペースインデックス作成
     if (workspaceRoot) {
         programResolver.indexWorkspace(workspaceRoot);
@@ -301,6 +278,29 @@ async function updateConfiguration() {
     
     logger.debug(`[updateConfiguration] Copybook search paths: ${searchPaths.join(', ')}`);
     logger.debug(`[updateConfiguration] Copybook extensions: ${globalSettings.copybookExtensions.join(', ')}`);
+}
+
+/**
+ * COPYBOOKの自動ロードが有効かどうか
+ */
+function shouldAutoLoadCopybooks(): boolean {
+    return globalSettings.copybookAutoLoad === true;
+}
+
+/**
+ * COPYBOOKを一度だけロードする（同一ドキュメントでの再ロードを抑制）
+ * @param document 対象ドキュメント
+ * @param force 強制的に再ロードする場合はtrue
+ * @returns ロードを実行した場合はtrue
+ */
+function loadCopybooksOnce(document: TextDocument, force = false): boolean {
+    if (!force && copybooksLoadedForDocument.has(document.uri)) {
+        return false;
+    }
+
+    loadCopybooksFromDocument(document);
+    copybooksLoadedForDocument.add(document.uri);
+    return true;
 }
 
 /**
@@ -314,7 +314,9 @@ documents.onDidChangeContent(change => {
     symbolIndex.indexDocument(change.document);
     const allSymbols = symbolIndex.getAllSymbols(change.document.uri);
     logger.debug(`[onDidChangeContent] Document: ${change.document.uri.substring(change.document.uri.lastIndexOf('/'))}, Symbols: ${allSymbols.length}`);
-    loadCopybooksFromDocument(change.document);
+    if (shouldAutoLoadCopybooks()) {
+        loadCopybooksOnce(change.document);
+    }
     
     // Log COPYBOOK table status after loading
     symbolIndex.logCopybookTableStatus(change.document.uri);
@@ -334,7 +336,9 @@ documents.onDidOpen(event => {
     symbolIndex.indexDocument(event.document);
     const allSymbols = symbolIndex.getAllSymbols(event.document.uri);
     logger.debug(`[onDidOpen] Document: ${event.document.uri.substring(event.document.uri.lastIndexOf('/'))}, Symbols: ${allSymbols.length}`);
-    loadCopybooksFromDocument(event.document);
+    if (shouldAutoLoadCopybooks()) {
+        loadCopybooksOnce(event.document);
+    }
     
     // Log COPYBOOK table status after loading
     symbolIndex.logCopybookTableStatus(event.document.uri);
@@ -400,7 +404,9 @@ connection.onHover((params: HoverParams): Hover | null => {
     
     // 現在のドキュメントと参照されているコピーブックをインデックス
     symbolIndex.indexDocument(document);
-    loadCopybooksFromDocument(document);
+    if (shouldAutoLoadCopybooks()) {
+        loadCopybooksOnce(document);
+    }
     
     const word = getWordAtPosition(document, params.position);
     logger.debug(`[Hover] Word at position: "${word}"`);
@@ -450,7 +456,9 @@ connection.onDocumentSymbol((params: DocumentSymbolParams): DocumentSymbol[] => 
     
     // ドキュメントをインデックス化
     symbolIndex.indexDocument(document);
-    loadCopybooksFromDocument(document);
+    if (shouldAutoLoadCopybooks()) {
+        loadCopybooksOnce(document);
+    }
     
     // すべてのシンボルを取得
     const allSymbols = symbolIndex.getAllSymbols(document.uri);
@@ -1287,10 +1295,11 @@ function getVariableCompletions(document: TextDocument): CompletionItem[] {
     const completions: CompletionItem[] = [];
     const addedVariables = new Set<string>(); // Track duplicates
     
-    // Get symbols from current document and load referenced COPYBOOKs
-    // Note: loadCopybooksFromDocument uses internal caching to avoid repeated loading
+    // Get symbols from current document and optionally load referenced COPYBOOKs once
     symbolIndex.indexDocument(document);
-    loadCopybooksFromDocument(document);
+    if (shouldAutoLoadCopybooks()) {
+        loadCopybooksOnce(document);
+    }
     
     const symbols = symbolIndex.getAllSymbols(document.uri);
     
@@ -1455,6 +1464,35 @@ function getProgramCompletions(): CompletionItem[] {
     
     return completions;
 }
+
+interface LoadCopybooksParams {
+    documentUri: string;
+}
+
+interface LoadCopybooksResult {
+    loadedCopybooks: number;
+}
+
+connection.onRequest('cobol/loadCopybooks', (params: LoadCopybooksParams): LoadCopybooksResult => {
+    if (!params?.documentUri) {
+        return { loadedCopybooks: 0 };
+    }
+
+    const document = documents.get(params.documentUri);
+    if (!document) {
+        return { loadedCopybooks: 0 };
+    }
+
+    symbolIndex.indexDocument(document);
+    loadCopybooksOnce(document, true);
+
+    const refs = symbolIndex.getCopybookReferences(document.uri);
+    return { loadedCopybooks: refs.length };
+});
+
+documents.onDidClose(event => {
+    copybooksLoadedForDocument.delete(event.document.uri);
+});
 
 documents.listen(connection);
 connection.listen();
@@ -1641,8 +1679,10 @@ function validateDocument(document: TextDocument): void {
         const lines = text.split('\n');
         const diagnostics: Diagnostic[] = [];
         
-        // コピーブックを事前にロードしてインデックス化
-        loadCopybooksFromDocument(document);
+        // コピーブックを事前にロードしてインデックス化（必要時のみ）
+        if (shouldAutoLoadCopybooks()) {
+            loadCopybooksOnce(document);
+        }
         
         // 現在のドキュメントと参照されているコピーブック内の定義済み変数を取得
         const allDefinedSymbols = new Set<string>();

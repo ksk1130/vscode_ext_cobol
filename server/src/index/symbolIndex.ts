@@ -84,6 +84,7 @@ export class SymbolIndex {
                 // 拡張子なしのファイルは特別な判定が必要なのでスキップ
                 return false;
             }
+            // 大文字・小文字を区別しない拡張子マッチング
             const regex = new RegExp(`${ext.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
             return regex.test(filePath);
         });
@@ -91,6 +92,7 @@ export class SymbolIndex {
     
     /**
      * ドキュメントから変数・パラグラフ・セクション・Divisionを抽出
+     * @param document 対象のテキストドキュメント
      */
     indexDocument(document: TextDocument): void {
         const uri = document.uri;
