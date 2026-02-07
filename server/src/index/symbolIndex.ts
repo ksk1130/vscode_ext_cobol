@@ -112,7 +112,6 @@ export class SymbolIndex {
         let identificationDivisionStart: number | null = null;
         let environmentDivisionStart: number | null = null;
         let dataDivisionStart: number | null = null;
-        let procedureDivisionStart: number | null = null;
         
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i];
@@ -189,7 +188,6 @@ export class SymbolIndex {
                     const idDiv = symbols.find(s => s.line === identificationDivisionStart && s.type === 'division');
                     if (idDiv) idDiv.endLine = i - 1;
                 }
-                procedureDivisionStart = i;
                 const match = contentArea.match(/PROCEDURE\s+DIVISION/i);
                 const divName = 'PROCEDURE DIVISION';
                 const columnInContent = match ? contentArea.indexOf(match[0]) : 0;
