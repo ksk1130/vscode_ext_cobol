@@ -1,5 +1,5 @@
 import * as path from 'path';
-import { workspace, ExtensionContext, window, ConfigurationTarget, ConfigurationChangeEvent } from 'vscode';
+import { workspace, ExtensionContext, window, ConfigurationTarget, ConfigurationChangeEvent, commands } from 'vscode';
 import {
     LanguageClient,
     LanguageClientOptions,
@@ -107,6 +107,34 @@ export async function activate(context: ExtensionContext) {
 
     // クライアントを起動
     client.start();
+
+    interface LoadCopybooksResult {
+        loadedCopybooks: number;
+    }
+
+    const loadCopybooksCommand = commands.registerCommand('cobol.loadCopybooks', async () => {
+        const editor = window.activeTextEditor;
+        if (!editor) {
+            window.showInformationMessage('No active editor to load COPYBOOKs.');
+            return;
+        }
+
+        if (editor.document.languageId !== 'cobol') {
+            window.showInformationMessage('Active file is not a COBOL document.');
+            return;
+        }
+
+        try {
+            const response = await client.sendRequest<LoadCopybooksResult>('cobol/loadCopybooks', {
+                documentUri: editor.document.uri.toString()
+            });
+            const loaded = response?.loadedCopybooks ?? 0;
+            window.showInformationMessage(`Loaded ${loaded} COPYBOOK(s) for current file.`);
+        } catch (err) {
+            window.showErrorMessage(`Failed to load COPYBOOKs: ${err}`);
+        }
+    });
+    context.subscriptions.push(loadCopybooksCommand);
 
     // ステータスバーに表示
     window.setStatusBarMessage('cobol LSP: Active', 3000);

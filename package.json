@@ -12,6 +12,12 @@
     "onLanguage:cobol"
   ],
   "contributes": {
+    "commands": [
+      {
+        "command": "cobol.loadCopybooks",
+        "title": "COBOL: Load Copybooks for Current File"
+      }
+    ],
     "languages": [
       {
         "id": "cobol",
@@ -83,6 +89,11 @@
             ""
           ],
           "description": "COPYBOOKファイルの拡張子"
+        },
+        "cobol.copybookAutoLoad": {
+          "type": "boolean",
+          "default": false,
+          "description": "COPYBOOKを自動で読み込む（無効時は手動コマンドでロード）"
         },
         "cobol.trace.server": {
           "type": "string",
