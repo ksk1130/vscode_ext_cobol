@@ -18,6 +18,10 @@
         "title": "COBOL: Load Copybooks for Current File"
       },
       {
+        "command": "cobol.reloadProgramIndex",
+        "title": "COBOL: Reload Program Index"
+      },
+      {
         "command": "cobol.openSettings",
         "title": "COBOL: Open Settings"
       }
@@ -51,7 +55,7 @@
     ],
     "configuration": {
       "type": "object",
-      "title": "cobol LSP",
+      "title": "COBOL Extension",
       "properties": {
         "cobol.copybookPaths": {
           "type": "array",
@@ -59,6 +63,7 @@
             "type": "string"
           },
           "uniqueItems": true,
+          "title": "COBOL Extension: Copybook Paths",
           "default": [
             "./copybooks",
             "./copy",
@@ -72,6 +77,7 @@
             "type": "string"
           },
           "uniqueItems": true,
+          "title": "COBOL Extension: Program Search Paths",
           "default": [
             "./src",
             "./programs",
@@ -85,6 +91,7 @@
             "type": "string"
           },
           "uniqueItems": true,
+          "title": "COBOL Extension: File Extensions",
           "default": [
             ".cbl",
             ".cob",
@@ -101,6 +108,7 @@
             "type": "string"
           },
           "uniqueItems": true,
+          "title": "COBOL Extension: Copybook Extensions",
           "default": [
             ".cpy",
             ".CPY",
@@ -113,6 +121,7 @@
         "cobol.copybookAutoLoad": {
           "type": "boolean",
           "default": false,
+          "title": "COBOL Extension: Copybook Auto Load",
           "description": "COPYBOOKを自動で読み込む（無効時は手動コマンドでロード）"
         },
         "cobol.trace.server": {
@@ -123,16 +132,19 @@
             "verbose"
           ],
           "default": "verbose",
+          "title": "COBOL Extension: Trace Server",
           "description": "LSPサーバーのトレースレベル"
         },
         "cobol.enableRulers": {
           "type": "boolean",
           "default": true,
+          "title": "COBOL Extension: Enable Rulers",
           "description": "COBOLファイルで7, 8, 12列目に縦線(ルーラー)を表示する"
         },
         "cobol.enableWarnings": {
           "type": "boolean",
           "default": true,
+          "title": "COBOL Extension: Enable Warnings",
           "description": "型チェックなどの警告を有効にする"
         }
       }
