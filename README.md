@@ -16,7 +16,7 @@ COBOL 向けの VS Code 拡張機能です。COBOL ソース (.cbl/.cob/.cobol/.
   - COPY文でのCOPYBOOK名の補完
 - **シグネチャヘルプ**（CALL文でのパラメータヒント）
 - COPYBOOK の REPLACING,DISJOINING/JOINING による接頭辞置換をサポート
-- COPYBOOK 検索パス（ワークスペース内の `copybooks/`、`copy/`、環境変数 `COBOL_COPYPATH`）
+- COPYBOOK 検索パス（ソース同階層 + `cobol.copybookPaths` + 環境変数 `COBOL_COPYPATH`）
 - TextMate ベースのシンタックスハイライト
 - 診断: 
   - 未定義への代入警告
@@ -137,9 +137,10 @@ VS Code の設定（settings.json）で以下をカスタマイズできます�
 以下の設定は Language Server で使用され、COPYBOOKの解決やプログラム検索に影響します：
 
 - **cobol.copybookPaths**: COPYBOOK検索パス（配列）
-  - デフォルト: `["./copybooks", "./copy", "./COPY"]`
-  - 例: `["./lib/copybooks", "./includes"]`
+  - デフォルト: `[]`（追加の検索パスなし）
+  - 例: `["./copybooks", "./lib/copybooks", "./includes"]`
   - 相対パスはワークスペースルートからの相対パスとして解釈されます
+  - 未設定の場合、COPYBOOK は基本的にソースと同階層 + `COBOL_COPYPATH` を探索します
   
 - **cobol.copybookExtensions**: COPYBOOKファイルの拡張子（配列）
   - デフォルト: `[".cpy", ".CPY", ".cbl", ".CBL", ""]`
@@ -147,7 +148,7 @@ VS Code の設定（settings.json）で以下をカスタマイズできます�
   - 同名COPYBOOKが複数ある場合は、ソース同階層 → `cobol.copybookPaths` の順 → `cobol.copybookExtensions` の順で最初に見つかったものが採用されます
   
 - **cobol.programSearchPaths**: COBOLプログラム検索パス（配列）
-  - デフォルト: `["./src", "./programs", "./SRC"]`
+  - デフォルト: `[]`（未指定時はワークスペースルートを探索）
   
 - **cobol.fileExtensions**: COBOLファイルの拡張子（配列）
   - デフォルト: `[".cbl", ".cob", ".cobol", ".CBL", ".COB", ".COBOL"]`
@@ -163,6 +164,7 @@ VS Code の設定（settings.json）で以下をカスタマイズできます�
 ```json
 {
   "cobol.copybookPaths": [
+    "./copybooks",
     "./lib/copybooks",
     "./external/includes"
   ],

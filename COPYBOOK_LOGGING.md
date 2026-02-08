@@ -4,51 +4,40 @@
 
 ### 日本語
 
-COPYBOOKリゾルバーの動作状況を確認できるように、設定されたパス配下で見つかったCOPYBOOKファイルをログ出力する機能を追加しました。
+COPYBOOKリゾルバーの動作状況を確認できるように、COPYBOOK解決や読み込みの際にログを出力します。
+起動時の自動スキャンは現行の構成では実行していません。
 
 ### English
 
-Added a logging feature to help understand the operation status of the COPYBOOK resolver by outputting the COPYBOOK files found under the configured paths.
+Logs are emitted during COPYBOOK resolution/loading to help verify resolver behavior.
+Automatic startup scans are not executed in the current build.
 
 ## 機能 / Features
 
-### 起動時のスキャン / Startup Scan
+### いつログが出るか / When Logs Are Emitted
 
-VS Code 拡張機能の起動時（ワークスペースを開いた時）に、以下の情報がログに出力されます：
+COPYBOOK解決やロードが実行されるタイミングで、以下の情報が出力されます：
 
-When the VS Code extension starts (when opening a workspace), the following information is logged:
+Logs are emitted when COPYBOOK resolution/loading runs:
 
-1. **検索パス / Search Paths**: 設定された COPYBOOK 検索パス
+1. **検索パス / Search Paths**: 使用される COPYBOOK 検索パス
 2. **拡張子 / Extensions**: 検索対象の拡張子リスト
-3. **見つかったファイル / Found Files**: 各パス配下で見つかった COPYBOOK ファイルの一覧
-4. **合計 / Total**: 見つかった COPYBOOK ファイルの総数
+3. **対象のCOPYBOOK / Target COPYBOOK**: 解決された COPYBOOK 名と URI
 
 ### ログ出力例 / Log Output Example
 
 ```
-[CopybookResolver] Scanning COPYBOOK files...
-[CopybookResolver] Search paths: /workspace/copybooks, /workspace/copy
-[CopybookResolver] Extensions: .cpy, .CPY, .cbl, .CBL, 
-[CopybookResolver]   Found 3 file(s) in /workspace/copybooks:
-[CopybookResolver]     - CUSTOMER.cpy
-[CopybookResolver]     - PRODUCT.CPY
-[CopybookResolver]     - ORDER.cpy
-[CopybookResolver]   Found 1 file(s) in /workspace/copy:
-[CopybookResolver]     - COMMON.cbl
-[CopybookResolver] Total COPYBOOK files found: 4
-```
-
-### パスが見つからない場合 / When Path Not Found
-
-```
-[CopybookResolver]   Path not found: /workspace/missing-dir
+[loadCopybooksFromDocument] About to index COPYBOOK: CUSTOMER-DATA
+[loadCopybooksFromDocument] COPYBOOK URI: file:///workspace/copybooks/CUSTOMER-DATA.cpy
+[loadCopybooksFromDocument] Content length: 128 chars
+[loadCopybooksFromDocument] Indexed 3 symbols from CUSTOMER-DATA
 ```
 
 ### エラーが発生した場合 / When Error Occurs
 
-```
-[CopybookResolver]   Error scanning /workspace/copybooks: Permission denied
-```
+現行実装では COPYBOOK ロード時のエラーはログに出さず、静かにスキップします。
+
+In the current implementation, COPYBOOK load errors are silently skipped without logging.
 
 ## ログの確認方法 / How to View Logs
 
@@ -75,23 +64,15 @@ The verbosity of logs can be configured:
 ### 実装内容 / Implementation
 
 1. **CopybookResolver クラス**:
-   - `logCallback` パラメータを追加（オプショナル）
-   - `scanAndLogCopybookFiles()` メソッドを追加
+  - `logCallback` を通じて解決処理のログを出力
 
 2. **server.ts**:
-   - CopybookResolver 初期化時にログコールバックを渡す
-   - 初期化完了後に `scanAndLogCopybookFiles()` を呼び出す
-
-### ファイル検出ロジック / File Detection Logic
-
-- ディレクトリは除外 / Directories are excluded
-- 設定された拡張子のファイルのみを検出 / Only files with configured extensions are detected
-- エラーハンドリング付き / With error handling
+  - COPYBOOK解決/ロード処理でログを出力
 
 ### 変更ファイル / Changed Files
 
-- `server/src/resolver/copybookResolver.ts`: スキャン機能の追加
-- `server/src/server.ts`: ログコールバックの設定とスキャン実行
+- `server/src/resolver/copybookResolver.ts`: 解析ロジックとログ出力
+- `server/src/server.ts`: COPYBOOKロード時のログ
 
 ## 使用例 / Use Cases
 
@@ -114,7 +95,7 @@ The verbosity of logs can be configured:
 
 ```json
 {
-  "cobol.copybookPaths": ["./copybooks", "./copy", "./COPY"],
+  "cobol.copybookPaths": ["./copybooks"],
   "cobol.copybookExtensions": [".cpy", ".CPY", ".cbl", ".CBL", ""],
   "cobol.trace.server": "verbose"
 }

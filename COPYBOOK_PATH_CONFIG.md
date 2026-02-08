@@ -4,15 +4,15 @@
 
 ### 日本語
 
-VS Code の設定ファイル（`settings.json`）で指定した `cobol.copybookPaths` と `cobol.copybookExtensions` を正しく尊重するように改善しました。
+VS Code の設定ファイル（`settings.json`）で指定した `cobol.copybookPaths` と `cobol.copybookExtensions` を尊重して COPYBOOK を解決します。
 
-以前は、ワークスペースルートからの相対パス（`<workspace>/copybooks`, `<workspace>/copy`）が固定で使用されていましたが、現在は設定ファイルで指定されたパスを優先して使用します。
+現在は、**ソースファイルと同じディレクトリ + `cobol.copybookPaths` + `COBOL_COPYPATH`** の順で探索します。固定のデフォルトパスはありません。
 
 ### English
 
-Improved to properly respect `cobol.copybookPaths` and `cobol.copybookExtensions` specified in VS Code settings (`settings.json`).
+Resolves COPYBOOKs based on `cobol.copybookPaths` and `cobol.copybookExtensions` in VS Code settings (`settings.json`).
 
-Previously, relative paths from workspace root (`<workspace>/copybooks`, `<workspace>/copy`) were hardcoded, but now the paths specified in the configuration file are prioritized.
+The search order is **source file directory + `cobol.copybookPaths` + `COBOL_COPYPATH`**. There are no fixed default search folders.
 
 ## 設定方法 / Configuration
 
@@ -67,13 +67,13 @@ COPYBOOK file extensions can also be configured:
 
 ## デフォルト設定 / Default Settings
 
-設定が未指定の場合、以下のデフォルト値が使用されます：
+設定が未指定の場合、COPYBOOK の追加検索パスは空です：
 
-If not configured, the following defaults are used:
+If not configured, additional COPYBOOK search paths are empty:
 
 ```json
 {
-  "cobol.copybookPaths": ["./copybooks", "./copy", "./COPY"],
+  "cobol.copybookPaths": [],
   "cobol.copybookExtensions": [".cpy", ".CPY", ".cbl", ".CBL", ""]
 }
 ```
@@ -118,17 +118,8 @@ When settings are changed, the COPYBOOK resolver is automatically reinitialized 
 When configuration is loaded, the following logs are output:
 
 ```
-[Config] copybookPaths from settings: ["./copybooks","./copy"]
-[Config] copybookExtensions from settings: [".cpy",".CPY",".cbl",".CBL",""]
-[Config] Resolved copybook paths: ["/workspace/copybooks","/workspace/copy"]
-[CopybookResolver] Scanning COPYBOOK files...
-[CopybookResolver] Search paths: /workspace/copybooks, /workspace/copy
-[CopybookResolver] Extensions: .cpy, .CPY, .cbl, .CBL, 
-[CopybookResolver]   Found 3 file(s) in /workspace/copybooks:
-[CopybookResolver]     - CUSTOMER.cpy
-[CopybookResolver]     - PRODUCT.CPY
-[CopybookResolver]     - ORDER.cpy
-[CopybookResolver] Total COPYBOOK files found: 3
+[updateConfiguration] Copybook search paths: /workspace/copybooks, /workspace/copy
+[updateConfiguration] Copybook extensions: .cpy, .CPY, .cbl, .CBL, 
 ```
 
 設定変更時：
@@ -136,11 +127,8 @@ When configuration is loaded, the following logs are output:
 When configuration changes:
 
 ```
-[Config Changed] copybookPaths: ["/absolute/path/to/copybooks"]
-[Config Changed] copybookExtensions: [".cpy"]
-[Config Changed] Resolved paths: ["/absolute/path/to/copybooks"]
-[CopybookResolver] Scanning COPYBOOK files...
-...
+[updateConfiguration] Copybook search paths: /absolute/path/to/copybooks
+[updateConfiguration] Copybook extensions: .cpy
 ```
 
 ## 環境変数 / Environment Variables
