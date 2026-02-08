@@ -5,6 +5,8 @@
   "main": "./out/extension.js",
   "scripts": {
     "compile": "tsc -p .",
+    "compile-tests": "tsc -p ./tsconfig.test.json",
+    "test": "npm run compile && npm run compile-tests && node ./out/test/runTest.js",
     "watch": "tsc -watch -p .",
     "vscode:prepublish": "npm run compile"
   },
@@ -143,8 +145,12 @@
     "vscode-languageclient": "^9.0.1"
   },
   "devDependencies": {
+    "@types/mocha": "^10.0.10",
     "@types/node": "^18.0.0",
     "@types/vscode": "^1.75.0",
+    "@vscode/test-electron": "^2.3.9",
+    "glob": "^10.3.12",
+    "mocha": "^10.8.2",
     "typescript": "^5.0.0"
   }
 }

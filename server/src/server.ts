@@ -147,6 +147,14 @@ function ensureCopybookResolver(): CopybookResolver {
         .concat(process.env.COBOL_COPYPATH ? [process.env.COBOL_COPYPATH] : [])
         .filter(p => p);
 
+    if (searchPaths.length === 0 && workspaceRoot) {
+        const defaultCopybooksPath = path.join(workspaceRoot, 'copybooks');
+        if (fs.existsSync(defaultCopybooksPath)) {
+            searchPaths.push(defaultCopybooksPath);
+            logger.debug(`[updateConfiguration] Added default copybooks path: ${defaultCopybooksPath}`);
+        }
+    }
+
     copybookResolver = new CopybookResolver({
         searchPaths,
         extensions: globalSettings.copybookExtensions
