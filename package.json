@@ -155,6 +155,7 @@
     "compile": "npm run compile:client && npm run compile:server",
     "compile:client": "cd client && npm run compile",
     "compile:server": "cd server && npm run compile",
+    "test:server": "cd server && npm test",
     "watch": "npm run watch:client & npm run watch:server",
     "watch:client": "cd client && npm run watch",
     "watch:server": "cd server && npm run watch",
