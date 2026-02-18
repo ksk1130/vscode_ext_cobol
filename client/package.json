@@ -1,6 +1,6 @@
 {
   "name": "cobol-lsp-client",
-  "version": "0.1.0",
+  "version": "0.4.0",
   "description": "cobol LSP Client for VS Code",
   "main": "./out/extension.js",
   "scripts": {
@@ -86,6 +86,16 @@
             "./SRC"
           ],
           "description": "COBOLプログラムファイルの検索パス"
+        },
+        "cobol.callProgramPaths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true,
+          "title": "COBOL Extension: CALL Program Paths",
+          "default": [],
+          "description": "CALL文で参照する外部サブルーチンの検索パス（programSearchPathsより優先）"
         },
         "cobol.fileExtensions": {
           "type": "array",

@@ -93,6 +93,7 @@ function readFileWithEncoding(filePath: string): string {
 interface CobolSettings {
     copybookPaths: string[];
     programSearchPaths: string[];
+    callProgramPaths: string[];
     fileExtensions: string[];
     copybookExtensions: string[];
     copybookAutoLoad: boolean;
@@ -114,6 +115,7 @@ const logger = getServerLogger();
 const defaultSettings: CobolSettings = {
     copybookPaths: [],
     programSearchPaths: [],
+    callProgramPaths: [],
     fileExtensions: ['.cob', '.COB', '.cbl', '.CBL', '.cobol', '.COBOL'],
     // Include .cpy variants so COPY 社員マスター resolves even when configuration is unavailable
     copybookExtensions: ['.cpy', '.CPY', '.cbl', '.CBL', ''],
@@ -251,6 +253,11 @@ function getProgramSearchRoots(sourceFileDir?: string): string[] {
         roots.push(sourceFileDir);
     }
 
+    // CALL専用検索パスを優先的に追加
+    const callRoots = resolveConfiguredPaths(globalSettings.callProgramPaths || [])
+        .filter(p => p);
+    roots.push(...callRoots);
+
     const configuredRoots = resolveConfiguredPaths(globalSettings.programSearchPaths || [])
         .filter(p => p);
     roots.push(...configuredRoots);
@@ -297,6 +304,7 @@ async function updateConfiguration() {
             globalSettings = {
                 copybookPaths: config.copybookPaths || defaultSettings.copybookPaths,
                 programSearchPaths: config.programSearchPaths || defaultSettings.programSearchPaths,
+                callProgramPaths: config.callProgramPaths || defaultSettings.callProgramPaths,
                 fileExtensions: config.fileExtensions || defaultSettings.fileExtensions,
                 copybookExtensions: config.copybookExtensions || defaultSettings.copybookExtensions,
                 copybookAutoLoad: config.copybookAutoLoad !== undefined ? config.copybookAutoLoad : defaultSettings.copybookAutoLoad,
@@ -330,6 +338,8 @@ async function updateConfiguration() {
     
     logger.debug(`[updateConfiguration] Copybook search paths: ${searchPaths.join(', ')}`);
     logger.debug(`[updateConfiguration] Copybook extensions: ${globalSettings.copybookExtensions.join(', ')}`);
+    logger.debug(`[updateConfiguration] CALL program search paths (callProgramPaths): ${(globalSettings.callProgramPaths || []).join(', ')}`);
+    logger.debug(`[updateConfiguration] Program search paths (programSearchPaths): ${(globalSettings.programSearchPaths || []).join(', ')}`);
 }
 
 /**
