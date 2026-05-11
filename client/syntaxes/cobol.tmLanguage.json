@@ -5,7 +5,7 @@
   "patterns": [
     {
       "name": "comment.line.cobol",
-      "match": "^\\s{0,7}[\\*].*$",
+      "match": "^.{6}\\*.*$",
       "comment": "COBOL comment line (position 7)"
     },
     {

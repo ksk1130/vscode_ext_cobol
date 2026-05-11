@@ -1,6 +1,6 @@
        IDENTIFICATION DIVISION.
        PROGRAM-ID. JAPANESE-COPYBOOK-TEST.
-      *================================================================
+123456*================================================================
       * 日本語COPYBOOK使用サンプルプログラム
       * Sample program using Japanese COPYBOOKs with 「ー」
       *
